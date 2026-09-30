@@ -74,3 +74,52 @@ button:disabled { cursor: not-allowed; }
     transition-duration: .01ms !important;
   }
 }
+
+/* Keep each discovery requirement readable, including unresolved criteria. */
+.criterion-detail { width: 100%; padding: 6px 0; }
+.criterion-detail .path-criterion { width: 100%; justify-content: flex-start; }
+.criterion-detail .path-criterion b { margin-left: auto; font-size: 10px; }
+.criterion-detail small { display: block; margin: 5px 8px; color: #627087; font-size: 11px; line-height: 1.5; }
+.criterion-detail .path-criterion:disabled { opacity: 1; cursor: default; }
+.offering-tile.status-ruled_out { opacity: .75; }
+
+/* A fixed-height workspace keeps coaching visible beside the live transcript. */
+.reference-studio { height: 100dvh; overflow: hidden; }
+.reference-studio .app-content { height: 100dvh; min-height: 0; overflow: hidden; }
+.reference-studio .call-main { min-height: 0; overflow: hidden; }
+.reference-studio .call-right { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.reference-studio .right-feed { min-height: 0; overflow-y: auto; }
+.cue-board { padding: 16px; background: #f7fafc; border: 1px solid #d7e4ec; border-radius: 14px; }
+.cue-board-heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; color: #31596d; font-size: 10px; letter-spacing: .05em; }
+.cue-board-heading span { display: flex; align-items: center; gap: 6px; }
+.cue-board-heading b { white-space: nowrap; letter-spacing: 0; }
+.ask-next { background: #e4f3f6; border-left: 4px solid #16829e; border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
+.ask-next > span { font-size: 10px; font-weight: 800; color: #11637d; }
+.ask-next h2 { margin: 6px 0; font-size: 19px; line-height: 1.35; color: #173b50; }
+.ask-next p { margin: 0; font-size: 11px; color: #527080; }
+.cue-paths-heading { display: flex; justify-content: space-between; font-size: 12px; margin: 14px 0 8px; }
+.compact-cue-list { display: grid; gap: 8px; }
+.compact-cue-card { padding: 10px 12px; border: 1px solid #d7e4ec; border-radius: 9px; background: white; }
+.compact-cue-card.explore { border-left: 3px solid #32977c; }
+.compact-cue-card.hold { border-left: 3px solid #bd8b37; }
+.compact-cue-title { display: flex; gap: 8px; align-items: center; }
+.compact-cue-title h3 { flex: 1; margin: 0; font-size: 13px; line-height: 1.35; }
+.compact-cue-title b { color: #267962; font-size: 12px; white-space: nowrap; }
+.cue-rank { color: #6b8190; font-size: 11px; }
+.cue-fit { margin: 5px 0; font-size: 11px; color: #617383; line-height: 1.4; }
+.cue-question { display: flex; gap: 8px; padding-top: 5px; font-size: 12px; line-height: 1.4; }
+.cue-question small { color: #14738e; font-size: 9px; font-weight: 800; padding-top: 2px; }
+.cue-details { margin-top: 7px; font-size: 11px; color: #4c677b; }
+.cue-details summary, .cue-followups summary, .service-details summary { cursor: pointer; }
+.cue-details button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: #eef6f9; padding: 6px; border-radius: 5px; margin-right: 8px; font-size: 11px; }
+.cue-details a { display: inline-flex; gap: 4px; font-size: 11px; }
+.cue-followups { margin-top: 12px; font-size: 12px; }
+.cue-followups p { font-size: 12px; line-height: 1.4; }
+.cue-empty { padding: 12px; color: #667e8f; font-size: 12px; line-height: 1.4; }
+.cue-footnote { display: block; margin-top: 12px; font-size: 10px; color: #7a8e9c; }
+.service-details { margin-top: 12px; font-size: 12px; color: #466277; }
+@media (max-width: 760px) {
+  .reference-studio, .reference-studio .app-content { height: auto; min-height: 100dvh; overflow: visible; }
+  .reference-studio .call-main { overflow: visible; }
+  .reference-studio .call-right { order: -1; }
+}

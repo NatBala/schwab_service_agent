@@ -1,0 +1,52 @@
+/* Porcelain light: warm workspace surfaces with clear white cards. */
+:root {
+  --workspace-background: #f7f5f0;
+  --workspace-card: #ffffff;
+  --workspace-text: #203d52;
+  --workspace-border: #e3e5e2;
+  --workspace-muted: #687b86;
+}
+body,
+.reference-studio { background: var(--workspace-background); color: var(--workspace-text); }
+.reference-studio .app-content,
+.reference-studio .app-topbar { background: var(--workspace-background); }
+.reference-studio .app-topbar > p { color: var(--workspace-text); }
+.reference-studio .nav-rail { background: #203d52; }
+.reference-studio .transcript-pane,
+.reference-studio .call-right,
+.reference-studio .client-profile-rail,
+.reference-studio .pane-tabs,
+.reference-studio .call-composer,
+.reference-studio .call-footer,
+.reference-studio .live-call-reason,
+.reference-studio .cue-board,
+.reference-studio .compact-cue-card,
+.reference-studio .completed-path-summary,
+.reference-studio .completed-path-card {
+  background: var(--workspace-card);
+  border-color: var(--workspace-border);
+}
+.reference-studio .right-feed.decision-view { background: var(--workspace-background); }
+.reference-studio .profile-identity { background: linear-gradient(#fff, #faf9f6); }
+.reference-studio .profile-section,
+.reference-studio .profile-account,
+.reference-studio .profile-rail-heading,
+.reference-studio .transcript-bottom,
+.reference-studio .live-tags { border-color: var(--workspace-border); }
+.reference-studio .call-right { box-shadow: 0 8px 25px #203d5208; }
+.reference-studio .training-label { background: #fff; border-color: var(--workspace-border); }
+.reference-studio .live-reason-copy h2,
+.reference-studio .compact-cue-title h3,
+.reference-studio .completed-summary-heading h2,
+.reference-studio .profile-identity h2,
+.reference-studio .profile-section h3,
+.reference-studio .profile-account strong { color: var(--workspace-text); }
+.reference-studio .live-reason-copy p,
+.reference-studio .profile-section p,
+.reference-studio .profile-account span,
+.reference-studio .completed-path-card p,
+.reference-studio .completed-path-summary > p,
+.reference-studio .reference-empty p { color: var(--workspace-muted); }
+.reference-studio .call-composer .typed-reply input { border-color: var(--workspace-border); }
+.reference-studio .compact-cue-card.explore { border-left-color: #32977c; }
+.reference-studio .compact-cue-card.hold { border-left-color: #bd8b37; }

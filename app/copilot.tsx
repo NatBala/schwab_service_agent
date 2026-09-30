@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { OfferingIcon, ConfidenceChart } from "./offering-visuals";
+import { canRunBackgroundCoaching, spokenReplyRequest } from "@/lib/realtime-turns";
+import { demoVerificationComplete } from "@/lib/demo-verification";
+import { callPathSummary } from "@/lib/call-path-summary";
+import { openAIConnectionError } from "@/lib/openai-errors";
 import {
   Activity,
   ArrowRight,
   AudioLines,
   Check,
-  ChevronDown,
   CircleAlert,
   ExternalLink,
   Headphones,
@@ -20,8 +25,7 @@ import {
 } from "lucide-react";
 import type { CustomerProfile } from "@/lib/customer-profiles";
 import type { ClientRoleBrief } from "@/lib/call-roles";
-import { computeFastPacket, fastDiscoveryQuestion, type FastPacket } from "@/lib/fast-recommendations";
-import { RELATIONSHIP_PATHS } from "@/lib/relationship-paths";
+import { coachingRequest, parseRealtimeInsights, topRelationshipPaths, mergePathAssessments, type StreamedCue } from "@/lib/realtime-intelligence";
 
 type Scenario = {
   id: string;
@@ -35,7 +39,6 @@ type Scenario = {
   customerOpener: string;
   clientBrief: ClientRoleBrief | null;
 };
-type PreviewLine = { speaker: "customer" | "representative"; text: string };
 
 type Turn = {
   id: string;
@@ -58,7 +61,7 @@ type Analysis = {
     state: "unresolved" | "in_progress" | "resolved";
     summary: string;
   };
-  representativeGuidance: Evidence & { nextStep: string; question: string; rationale: string };
+  representativeGuidance: Evidence & { nextStep: string; question: string; rationale: string; followUpQuestions?: string[] };
   tags: Array<Evidence & {
     id: string;
     label: string;
@@ -85,6 +88,8 @@ type Analysis = {
     sourceUrl: string;
     status: "possible" | "emerging" | "explore" | "hold" | "ruled_out";
     signalConfidence: number | null;
+    assessed?: boolean;
+    question?: string;
     rationale: string;
     nextStep: string;
   }>;
@@ -135,44 +140,29 @@ function scrollToEvidence(ids: string[]) {
   container.scrollTo({ top: container.scrollTop + distance - 60, behavior: "smooth" });
 }
 
-function RecommendationTile({ analysis, fastPacket, focusedPath, otherPaths, serviceProgress, ended, customerSpeaking, awaitingClientAnswer, modelGuidanceCurrent, fresh, error, latestCustomerTurn, latestRepresentativeTurn, evidenceTurn, cueLatencyMs, onEvidence }: {
+function CueBoard({ analysis, cue, paths, turns, updating, speaking, onEvidence }: {
   analysis: Analysis | null;
-  fastPacket: FastPacket | null;
-  focusedPath: Analysis["relationshipPaths"][number] | undefined;
-  otherPaths: Analysis["relationshipPaths"];
-  serviceProgress: number;
-  ended: boolean;
-  customerSpeaking: boolean;
-  awaitingClientAnswer: boolean;
-  modelGuidanceCurrent: boolean;
-  fresh: boolean;
-  error: string;
-  latestCustomerTurn: Turn | undefined;
-  latestRepresentativeTurn: Turn | undefined;
-  evidenceTurn: Turn | undefined;
-  cueLatencyMs: number | null;
+  cue: StreamedCue | null;
+  paths: Analysis["relationshipPaths"];
+  turns: Turn[];
+  updating: boolean;
+  speaking: boolean;
   onEvidence: (ids: string[]) => void;
 }) {
-  const awaitingCue = !ended && (customerSpeaking || (!!latestCustomerTurn && !fresh));
-  if (awaitingCue) return <section className="recommendation-tile cue-pending" aria-label="Representative guidance" aria-live="polite">
-    <div className="recommendation-top"><span className="recommendation-eyebrow"><Sparkles size={16} /> COPILOT GUIDANCE FOR JORDAN</span><span className={"recommendation-live" + (!error ? " updating" : "")}><i />{error ? "Unavailable" : customerSpeaking ? "Listening" : "Updating"}</span></div>
-    <div className="recommendation-intro"><div><span className="recommendation-stage">{customerSpeaking ? "CUSTOMER SPEAKING" : "CUSTOMER FINISHED"}</span><h2>{error ? "Next move unavailable" : customerSpeaking ? "Listen for the need" : "Finding your next move"}</h2><p>{error ? "The latest answer could not be analyzed. Continue the service conversation and check the insight status below." : customerSpeaking ? "The next cue will follow this answer." : "Building a cue from the latest customer statement."}</p></div></div>
-    <div className="recommendation-bottom"><span>Service request <b>{serviceProgress}%</b></span><div className="recommendation-progress"><i style={{ width: `${serviceProgress}%` }} /></div></div>
-  </section>;
-  const guidance = modelGuidanceCurrent ? analysis?.representativeGuidance ?? fastPacket?.guidance : fastPacket?.guidance ?? analysis?.representativeGuidance;
-  const isDiscovery = !!focusedPath;
-  const title = fastPacket?.guidance.title ?? focusedPath?.name ?? (analysis?.serviceStatus.state === "resolved" ? "Open the broader conversation" : "Handle the call reason");
-  const nextStep = awaitingClientAnswer ? "Let the client answer Jordan's latest question before advancing the conversation." : guidance?.nextStep || "Listen to the caller's request and clarify the next service step.";
-  const question = ended || awaitingClientAnswer ? "" : guidance?.question;
-  const evidenceIds = guidance?.evidenceIds.length ? guidance.evidenceIds : focusedPath?.evidenceIds ?? [];
-  const summary = focusedPath?.rationale ?? fastPacket?.guidance.rationale ?? analysis?.serviceStatus.summary ?? "The caller's immediate request will appear here.";
-  return <section className={"recommendation-tile" + (isDiscovery ? " has-path" : " service-mode")} aria-label="Representative guidance" aria-live="polite">
-    <div className="recommendation-top"><span className="recommendation-eyebrow"><Sparkles size={16} /> {ended ? "RECOMMENDED FOLLOW-UP" : "COPILOT GUIDANCE FOR JORDAN"}</span><span className="recommendation-live"><i />{ended ? "At call close" : cueLatencyMs !== null && latestCustomerTurn ? `Ready in ${cueLatencyMs} ms` : latestCustomerTurn ? `After client · ${timeLabel(latestCustomerTurn.at)}` : "Ready"}</span></div>
-    <div className="recommendation-intro"><div><span className="recommendation-stage">{awaitingClientAnswer ? "CLIENT TURN" : isDiscovery ? focusedPath.status === "explore" ? "READY TO EXPLORE" : focusedPath.status === "hold" ? "PAUSE AND CLARIFY" : "NEED DETECTED" : (fastPacket?.serviceState ?? analysis?.serviceStatus.state) === "resolved" ? "SERVICE ANSWERED" : "SERVICE FIRST"}</span><h2>{title}</h2><p>{summary}</p></div>{isDiscovery && <span className="recommendation-family">{focusedPath.family}</span>}</div>
-    <div className="recommendation-action"><span>{ended ? "FOLLOW-UP STEP" : "SUGGESTED NEXT MOVE"}</span><strong>{nextStep}</strong>{question && <p><b>Possible question</b> “{question}”</p>}{guidance?.rationale && guidance.rationale !== summary && <small className="recommendation-why">WHY NOW · {guidance.rationale}</small>}</div>
-    {latestRepresentativeTurn && <div className="representative-grounding"><span>JORDAN ACTUALLY SAID · {timeLabel(latestRepresentativeTurn.at)}</span><p>{latestRepresentativeTurn.text}</p></div>}
-    {evidenceTurn && evidenceIds.includes(evidenceTurn.id) && <button type="button" className="recommendation-evidence" onClick={() => onEvidence(evidenceIds)}><span>HEARD FROM THE CUSTOMER</span><q>{evidenceTurn.text}</q><ArrowRight size={16} /></button>}
-    <div className="recommendation-bottom"><span>Service request <b>{serviceProgress}%</b></span><div className="recommendation-progress"><i style={{ width: `${serviceProgress}%` }} /></div>{otherPaths.length > 0 && <div className="recommendation-other"><small>ALSO EMERGING</small>{otherPaths.slice(0, 3).map((path) => <span key={path.id}>{path.name}</span>)}</div>}</div>
+  const question = cue?.representativeGuidance.question ?? analysis?.representativeGuidance.question;
+  return <section className="cue-board" aria-label="Live cue board" aria-live="polite">
+    <div className="cue-board-heading"><span><Sparkles size={16} /> REPRESENTATIVE CUE BOARD</span><b>{speaking ? "Listening" : updating ? cue ? "Cue ready · assessing fit" : "Updating cue…" : "Cue ready"}</b></div>
+    <div className="ask-next"><span>ASK NEXT</span><h2>{question || "What can I help you with today?"}</h2>{(cue || analysis) && <p>{(cue?.serviceStatus.state ?? analysis?.serviceStatus.state) === "resolved" ? "Discover the broader goal · one question at a time" : "Resolve the service question first"}</p>}</div>
+    <div className="cue-paths-heading"><strong>Top relationship paths</strong><span>{paths.length} / 3</span></div>
+    {paths.length ? <div className="compact-cue-list">{paths.map((path, index) => <article key={path.id} className={"compact-cue-card " + path.status}>
+      <div className="compact-cue-title"><OfferingIcon id={path.id} /><span className="cue-rank">{index + 1}</span><h3>{path.name}</h3></div>
+      <ConfidenceChart value={path.signalConfidence} unknown={path.status === "possible"} />
+      <p className="cue-fit">{path.status === "hold" ? "Clarify constraint" : path.status === "possible" ? "Discovery candidate" : "Relevant signal"} · {path.rationale}</p>
+      {path.question && <div className="cue-question"><small>ASK</small><strong>{path.question}</strong></div>}
+      <details className="cue-details"><summary>Evidence{path.id === "automated_investing" ? " & 7 criteria" : " & next step"}</summary><p>{path.nextStep}</p><q>{turns.findLast(turn => turn.role === "customer" && path.evidenceIds.includes(turn.id))?.text}</q>{path.evidenceIds.length > 0 && <button type="button" onClick={() => onEvidence(path.evidenceIds)}>View customer evidence <ArrowRight size={12} /></button>}{path.id === "automated_investing" && analysis && <AutomatedCriteria criteria={analysis.criteria} onEvidence={onEvidence} />}<a href={path.sourceUrl} target="_blank" rel="noreferrer">Product reference <ExternalLink size={12} /></a></details>
+    </article>)}</div> : <div className="cue-empty">Discovery paths will appear here as the client answers. No offering established yet.</div>}
+    {!!analysis?.representativeGuidance.followUpQuestions?.length && <details className="cue-followups"><summary>Next questions to keep in reserve</summary>{analysis.representativeGuidance.followUpQuestions.map((item, index) => <p key={index}>{index + 1}. {item}</p>)}</details>}
+    <small className="cue-footnote">Confidence measures conversation evidence. Candidates still need discovery.</small>
   </section>;
 }
 
@@ -187,48 +177,52 @@ function CallReasonVisual({ analysis, quickReason, fastReason, score, servicePro
   const confirmedReason = analysis && analysis.callReason.category !== "Unclassified" ? analysis.callReason : null;
   const reason = fastReason ?? confirmedReason ?? quickReason;
   const identified = !!reason && reason.category !== "Unclassified";
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  return <section className="reason-visual" aria-label="Call reason and confidence">
-    <div className="reason-visual-gauge" role="img" aria-label={`Call reason confidence ${score} percent`}>
-      <svg viewBox="0 0 112 112" aria-hidden="true"><circle className="reason-visual-track" cx="56" cy="56" r={radius} /><circle className="reason-visual-fill" cx="56" cy="56" r={radius} strokeDasharray={circumference} strokeDashoffset={circumference * (1 - score / 100)} /></svg>
-      <span><strong>{score}<small>%</small></strong><small>confidence</small></span>
-    </div>
-    <div className="reason-visual-content">
-      <div className="reason-visual-head"><span>CALL REASON · LIVE CLASSIFICATION</span><b>{fastReason || confirmedReason ? "Identified" : quickReason ? "Initial match" : "Listening"}</b></div>
-      <h2>{identified ? reason.reason : "Listening for the call reason"}</h2>
-      <div className="reason-visual-taxonomy"><span><small>CATEGORY</small><strong>{identified ? reason.category : "Awaiting caller"}</strong></span><i /><span><small>SUBCATEGORY</small><strong>{identified ? reason.subcategory : "—"}</strong></span></div>
-      <div className="reason-visual-bottom"><span>Service request <b>{serviceProgress}%</b></span><div><i style={{ width: `${serviceProgress}%` }} /></div>{identified && !!reason.evidenceIds.length && <button type="button" onClick={() => onEvidence(reason.evidenceIds)}>View evidence <ArrowRight size={13} /></button>}</div>
-    </div>
+  return <section className="live-call-reason" aria-label="Live call reason" aria-live="polite">
+    <span className="reason-symbol"><Headphones size={21} /></span>
+    <div className="live-reason-copy"><small>CALL REASON <b>{confirmedReason ? "Identified" : quickReason ? "Initial match" : "Listening"}</b></small><h2>{identified ? reason.reason : "Listening for the call reason"}</h2><p>{identified ? `${reason.category} · ${reason.subcategory}` : "Populates automatically from the conversation"}</p></div>
+    <div className="live-service-progress"><span>Service <b>{serviceProgress}%</b></span><div><i style={{width: `${serviceProgress}%`}} /></div>{identified && reason.evidenceIds.length > 0 && <button type="button" onClick={() => onEvidence(reason.evidenceIds)}>Evidence <ArrowRight size={11} /></button>}</div>
+    <span className="sr-only">Call reason confidence {score} percent</span>
   </section>;
 }
 
-function CustomerProfileStrip({ name, age, profile, turns, expanded, onToggle }: {
-  name: string;
-  age: number;
-  profile: CustomerProfile;
-  turns: Turn[];
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const customerWords = turns.filter((turn) => turn.role === "customer").map((turn) => turn.text.toLowerCase()).join(" ");
-  const learned = profile.discoverable.filter((fact) => fact.phrases.some((phrase) => customerWords.includes(phrase.toLowerCase())));
-  return <section className="customer-profile" aria-label="Customer profile">
-    <div className="profile-primary"><span className="profile-avatar"><UserRound size={19} /></span><span><small>CLIENT PROFILE · SYNTHETIC CRM</small><strong>{name}</strong></span></div>
-    <div className="profile-metric"><small>AGE</small><strong>{age > 0 ? age : "Not on file"}</strong></div>
-    <div className="profile-metric"><small>RELATIONSHIP</small><strong>{profile.relationship}</strong></div>
-    <div className="profile-metric"><small>ACCOUNTS</small><strong>{profile.accounts.length ? `${profile.accounts.length} on file` : "Not established"}</strong></div>
-    <div className="profile-metric"><small>PRIOR CONTACTS</small><strong>{profile.priorContacts} simulated</strong></div>
-    <button className="profile-expand" type="button" aria-expanded={expanded} onClick={onToggle}>View profile <ChevronDown size={15} /></button>
-    {expanded && <div className="profile-detail">
-      <div className="profile-detail-head"><div><small>RELATIONSHIP SNAPSHOT</small><h2>{name}</h2><p>{profile.context}</p></div><span>Training data</span></div>
-      <div className="profile-detail-grid">
-        <div><h3>Accounts and assets</h3>{profile.accounts.length ? profile.accounts.map((account) => <div className="profile-account" key={account.name}><strong>{account.name}</strong><span>{account.detail}</span></div>) : <p>No existing Schwab account confirmed for this caller.</p>}</div>
-        <div><h3>Contact history</h3><div className="profile-account"><strong>{profile.priorContacts} prior simulated {profile.priorContacts === 1 ? "contact" : "contacts"}</strong><span>Most recent: {profile.lastContact}</span></div><p>Contact history is added for this demo and is not a supplied call record.</p></div>
-        <div><h3>Learned in this call</h3>{learned.length ? <div className="profile-learned">{learned.map((fact) => <span key={fact.label}>{fact.label}</span>)}</div> : <p>Household and goal details appear here when the customer shares them.</p>}</div>
-      </div>
-    </div>}
+function CompletedCallSummary({ paths, turns, onEvidence }: { paths: Analysis["relationshipPaths"]; turns: Turn[]; onEvidence: (ids: string[]) => void }) {
+  const labels: Record<string, string> = { possible: "Discovery candidate", emerging: "Relevant signal", explore: "Ready to explore", hold: "Constraint to clarify", ruled_out: "Ruled out" };
+  return <section className="completed-path-summary" aria-label="Completed call relationship summary">
+    <div className="completed-summary-heading"><div><small>CALL COMPLETE</small><h2>Relationship paths covered</h2></div><span>{paths.length} {paths.length === 1 ? "path" : "paths"}</span></div>
+    <p>All paths discussed or discovered in this call, with their latest evidence and status.</p>
+    {paths.length ? <div className="completed-path-list">{paths.map(path => {
+      const namedTurns = turns.filter(turn => turn.text.toLowerCase().includes(path.name.replace(/^Schwab /, "").toLowerCase())).map(turn => turn.id);
+      const ids = path.evidenceIds.length ? path.evidenceIds : namedTurns;
+      return <article className={"completed-path-card " + path.status} key={path.id}><div className="compact-cue-title"><OfferingIcon id={path.id} /><h3>{path.name}</h3></div><span className="summary-path-status">{labels[path.status]}</span><ConfidenceChart value={path.signalConfidence} unknown={path.status === "possible" || !path.evidenceIds.length} /><p>{path.evidenceIds.length ? path.rationale : "Mentioned in the conversation; client fit has not been established."}</p>{path.evidenceIds.length > 0 && <p className="summary-next-step"><strong>Next step</strong> {path.nextStep}</p>}<button type="button" disabled={!ids.length} onClick={() => onEvidence(ids)}>Conversation evidence <ArrowRight size={12} /></button></article>;
+    })}</div> : <div className="cue-empty">No relationship offering was established or discussed in the captured conversation.</div>}
+    <small className="cue-footnote">Confidence reflects conversation evidence, not eligibility or suitability. Unknown relevance is shown without a percentage.</small>
   </section>;
+}
+
+function ClientProfilePanel({ name, age, profile, turns, verified, onVerify }: {
+  name: string; age: number; profile: CustomerProfile; turns: Turn[]; verified: boolean; onVerify: () => void;
+}) {
+  const words = turns.filter(turn => turn.role === "customer").map(turn => turn.text.toLowerCase()).join(" ");
+  const learned = profile.discoverable.filter(fact => fact.phrases.some(phrase => words.includes(phrase.toLowerCase())));
+  return <aside className="client-profile-rail" aria-label="Client profile">
+    <div className="profile-rail-heading"><UserRound size={16} /><strong>Client profile</strong><span>{verified ? "Verified" : "Locked"}</span></div>
+    <div className="profile-identity"><Image width={104} height={104} priority unoptimized src={profile.portrait === "male" ? "/profiles/client-male.png" : "/profiles/client-female.png"} alt={`Fictional training portrait for ${name}`} /><h2>{name}</h2><p>{age > 0 ? `Age ${age} · ` : ""}Demo client</p><span className={verified ? "" : "pending"}>{verified ? <Check size={12} /> : <UserRound size={12} />}{verified ? "Verification confirmed" : "Verification pending"}</span></div>
+    {!verified ? <div className="profile-locked"><h2>Open account snapshot</h2><p>Confirm the secure verification step to view the client’s accounts.</p><button type="button" onClick={onVerify}>Confirm demo verification <Check size={14} /></button><small>Off-channel training verification · no identity credentials required here.</small></div> : <>
+      <div className="profile-section profile-relationship"><small>RELATIONSHIP</small><p>{profile.relationship}</p></div>
+      <div className="profile-section"><small>CURRENT SERVICE NEED</small><p>{profile.context}</p></div>
+      <div className="profile-section"><h3>Accounts <span>{profile.accounts.length}</span></h3>{profile.accounts.length ? profile.accounts.map(account => <div className="profile-account" key={account.name}><strong>{account.name}</strong><span>{account.detail}</span></div>) : <p>No existing account confirmed in the script.</p>}</div>
+      <div className="profile-section"><h3>Learned in this call</h3>{learned.length ? <div className="profile-learned">{learned.map(fact => <span key={fact.label}>{fact.label}</span>)}</div> : <p>Goals and household details will appear as the client shares them.</p>}</div>
+      <details className="profile-section"><summary>Demo contact history</summary><p>{profile.priorContacts} simulated prior contacts</p><p>Last: {profile.lastContact}</p></details>
+      <div className="profile-provenance">Script-based training profile · synthetic portrait. Contact history is illustrative.</div>
+    </>}
+  </aside>;
+}
+
+function CallWaveform({ speaker, waiting }: { speaker: "customer" | "representative" | null; waiting: boolean }) {
+  return <div className={"call-waveform " + (speaker ?? (waiting ? "thinking" : "idle"))} aria-label={speaker === "customer" ? "Client speaking" : speaker === "representative" ? "Jordan speaking" : waiting ? "Preparing reply" : "Audio ready"}>
+    <div className="wave-bars" aria-hidden="true">{Array.from({ length: 63 }, (_, i) => <i key={i} style={{ height: `${(4 + Math.pow(Math.sin(i * .31), 2) * (12 + 30 * Math.pow(Math.sin(i * .097), 2))).toFixed(3)}px`, animationDelay: `${(i * -.065).toFixed(3)}s` }} />)}</div>
+    <span>{speaker === "customer" ? "CLIENT SPEAKING" : speaker === "representative" ? "JORDAN SPEAKING" : waiting ? "JORDAN PREPARING REPLY" : "READY TO LISTEN"}</span>
+  </div>;
 }
 
 function AutomatedCriteria({ criteria, onEvidence }: { criteria: Analysis["criteria"]; onEvidence: (ids: string[]) => void }) {
@@ -236,37 +230,9 @@ function AutomatedCriteria({ criteria, onEvidence }: { criteria: Analysis["crite
   return <div className="path-criteria">
     <div className="path-criteria-head"><strong>Automated investing requirements</strong><span>{met} of {criteria.length} established</span></div>
     <div className="path-criteria-track"><i style={{ width: `${criteria.length ? met / criteria.length * 100 : 0}%` }} /></div>
-    <div className="path-criteria-list">{criteria.map((criterion) => <button type="button" key={criterion.id} className={"path-criterion " + criterion.status} title={criterion.rationale} disabled={!criterion.evidenceIds.length} onClick={() => onEvidence(criterion.evidenceIds)}><span>{criterion.status === "met" ? <Check size={12} /> : criterion.status === "not_met" ? "!" : "·"}</span>{criterion.label}</button>)}</div>
+    <div className="path-criteria-list">{criteria.map(criterion => <div key={criterion.id} className={"criterion-detail " + criterion.status}><button type="button" className={"path-criterion " + criterion.status} disabled={!criterion.evidenceIds.length} onClick={() => onEvidence(criterion.evidenceIds)}><span>{criterion.status === "met" ? <Check size={12} /> : criterion.status === "not_met" ? "!" : "?"}</span>{criterion.label}<b>{criterion.status === "met" ? "Established" : criterion.status === "not_met" ? "Conflict" : "Unknown"}</b></button><small>{criterion.rationale}</small></div>)}</div>
     <p>Conversation evidence only. The formal investor questionnaire determines eligibility and portfolio recommendations.</p>
   </div>;
-}
-
-function OfferingTile({ path, criteria, turns, current, rank, onEvidence }: {
-  path: Analysis["relationshipPaths"][number];
-  criteria: Analysis["criteria"];
-  turns: Turn[];
-  current: boolean;
-  rank?: number;
-  onEvidence: (ids: string[]) => void;
-}) {
-  const quote = [...turns].reverse().find((turn) => turn.role === "customer" && path.evidenceIds.includes(turn.id));
-  const status = {
-    possible: "To explore",
-    emerging: "Signal detected",
-    explore: "Ready to discuss",
-    hold: "On hold",
-    ruled_out: "Ruled out",
-  }[path.status];
-  return <article className={"offering-tile status-" + path.status + (current ? " is-current" : "") + (rank === 1 ? " top-recommendation" : "") + (path.id === "automated_investing" ? " automated-tile" : "")}>
-    <div className="offering-tile-top"><span>{path.family}</span><b>{rank ? `#${rank} · ${status}` : status}</b></div>
-    <div className="offering-title-row"><h3>{path.name}</h3>{path.signalConfidence !== null && <strong>{path.signalConfidence}%<small>signal confidence</small></strong>}</div>
-    {path.signalConfidence !== null && <div className="offering-confidence"><i style={{ width: `${path.signalConfidence}%` }} /></div>}
-    <p className="offering-rationale">{path.status === "possible" ? "No customer statement supports this path yet. Explore only if the caller raises a related need." : path.rationale}</p>
-    <div className="offering-guidance"><span>{path.status === "possible" ? "DISCOVERY GUIDELINE" : "NEXT STEP"}</span><p>{path.nextStep}</p></div>
-    {quote && <button type="button" className="offering-evidence" onClick={() => onEvidence(path.evidenceIds)}><q>{quote.text}</q><ArrowRight size={14} /></button>}
-    {path.id === "automated_investing" && criteria.length > 0 && <AutomatedCriteria criteria={criteria} onEvidence={onEvidence} />}
-    <a className="offering-source" href={path.sourceUrl} target="_blank" rel="noreferrer">Schwab source <ExternalLink size={13} /></a>
-  </article>;
 }
 
 function CallTransition({ customerTurn, representativeTurn, milestones, serviceEvent, onEvidence }: {
@@ -296,13 +262,12 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [fastPacket, setFastPacket] = useState<FastPacket | null>(null);
-  const [cueLatencyMs, setCueLatencyMs] = useState<number | null>(null);
+  const [, setCueLatencyMs] = useState<number | null>(null);
   const [analyzedCustomerTurnId, setAnalyzedCustomerTurnId] = useState("");
-  const [analyzedTurnId, setAnalyzedTurnId] = useState("");
   const [journeyEvents, setJourneyEvents] = useState<JourneyEvent[]>([]);
-  const [latestPathId, setLatestPathId] = useState("");
+  const [, setLatestPathId] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
+  const [streamedCue, setStreamedCue] = useState<StreamedCue | null>(null);
   const [awaitingCustomerReply, setAwaitingCustomerReply] = useState(false);
   const [callError, setCallError] = useState("");
   const [analysisError, setAnalysisError] = useState("");
@@ -316,15 +281,22 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const [serviceProgress, setServiceProgress] = useState(0);
   const [reasonScore, setReasonScore] = useState(0);
   const [quickReason, setQuickReason] = useState<QuickReason | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [briefOpen, setBriefOpen] = useState(true);
+  const [verificationConfirmed, setVerificationConfirmed] = useState(false);
 
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const turnsRef = useRef<Turn[]>([]);
-  const fastPacketRef = useRef<FastPacket | null>(null);
+  const analysisRef = useRef<Analysis | null>(null);
+  const primaryGenerationRef = useRef(false);
+  const typedReplyPendingRef = useRef(false);
+  const activeCoachingIdRef = useRef("");
+  const clientSpeakingRef = useRef(false);
+  const coachingResponseIdsRef = useRef(new Set<string>());
+  const replyTimingRef = useRef<{ started: number; cueMs: number | null; requestMs: number | null; audioStarted: boolean } | null>(null);
+  const coachingInFlightRef = useRef(false);
+  const coachingTimeoutRef = useRef<number | null>(null);
   const completeIdsRef = useRef(new Set<string>());
   const itemOrderRef = useRef(new Map<string, number>());
   const itemTimeRef = useRef(new Map<string, number>());
@@ -339,7 +311,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const nextItemOrderRef = useRef(0);
   const startedAtRef = useRef(0);
   const analysisTimerRef = useRef<number | null>(null);
-  const analysisAbortRef = useRef<AbortController | null>(null);
   const analysisVersionRef = useRef(0);
   const analysisPendingRef = useRef<{ turns: Turn[]; scenarioId: string } | null>(null);
   const clientSpeechStoppedAtRef = useRef<number | null>(null);
@@ -355,36 +326,18 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const draftList = Object.values(drafts);
   const isInCall = status === "connecting" || status === "live" || status === "preview";
   const waitingForRepresentative = awaitingCustomerReply && status === "live";
-  const fastReason: QuickReason | null = fastPacket?.callReason ? {
-    ...fastPacket.callReason,
-    confidence: fastPacket.callReason.confidence >= 80 ? "high" : fastPacket.callReason.confidence >= 55 ? "medium" : "low",
-  } : null;
-  const displayServiceProgress = fastPacket?.serviceProgress ?? serviceProgress;
-  const displayReasonScore = fastPacket?.callReason?.confidence ?? reasonScore;
-  const reasonIdentified = !!fastReason || !!quickReason || !!analysis && analysis.callReason.category !== "Unclassified";
-  const relationshipReady = reasonIdentified && fastPacket?.serviceState === "resolved";
-  const visiblePaths: Analysis["relationshipPaths"] = relationshipReady ? fastPacket?.paths ?? [] : [];
-  // Preserve the fast engine's order so the leading tile and live cue agree.
-  const recommendedPaths = visiblePaths.filter((path) => path.status === "emerging" || path.status === "explore");
-  const heldPaths = visiblePaths.filter((path) => path.status === "hold");
-  const watchPaths: Analysis["relationshipPaths"] = relationshipReady ? (fastPacket?.candidatePathIds ?? [])
-    .filter((id) => !visiblePaths.some((path) => path.id === id) && !fastPacket?.blockedPathIds.includes(id))
-    .flatMap((id) => {
-      const catalog = RELATIONSHIP_PATHS.find((path) => path.id === id);
-      return catalog ? [{ ...catalog, status: "possible" as const, signalConfidence: 0, rationale: "No customer statement supports this path yet.", nextStep: fastDiscoveryQuestion(id), evidenceIds: [] }] : [];
-    }) : [];
-  const currentCriteria = analyzedCustomerTurnId === fastPacket?.throughCustomerTurnId ? analysis?.criteria ?? [] : [];
-  const focusedPath = recommendedPaths[0] ?? heldPaths[0];
+  const displayServiceProgress = serviceProgress;
+  const displayReasonScore = reasonScore;
+  const relationshipReady = analysis?.serviceStatus.state === "resolved";
+  const completedPaths = analysis ? callPathSummary(analysis.relationshipPaths, turns) : [];
+  const visiblePaths: Analysis["relationshipPaths"] = analysis ? topRelationshipPaths(analysis.relationshipPaths) : [];
   const latestCustomerTurn = turns.findLast((turn) => turn.role === "customer");
-  const latestRepresentativeTurn = turns.findLast((turn) => turn.role === "representative");
-  const recommendationEvidenceIds = fastPacket?.guidance.evidenceIds.length ? fastPacket.guidance.evidenceIds : focusedPath?.evidenceIds ?? [];
-  const recommendationEvidenceTurn = [...turns].reverse().find((turn) => turn.role === "customer" && recommendationEvidenceIds.includes(turn.id));
-  const firstPathEvent = relationshipReady ? journeyEvents.find((event) => event.pathId !== "call-reason" && event.pathId !== "service") : undefined;
+  const firstPathEvent = relationshipReady ? journeyEvents.find((event) => event.pathId !== "call-reason" && event.pathId !== "service" && event.pathId !== "service_recovery") : undefined;
   const pivotTurnIndex = firstPathEvent ? turns.findIndex((turn) => firstPathEvent.evidenceIds.includes(turn.id)) : -1;
   const pivotCustomerTurn = pivotTurnIndex >= 0 ? turns[pivotTurnIndex] : null;
   const serviceEvent = journeyEvents.find((event) => event.pathId === "service");
   const pivotRepresentativeTurn = pivotTurnIndex >= 0 ? [...turns.slice(0, pivotTurnIndex)].reverse().find((turn) => turn.role === "representative" && turn.at >= (serviceEvent?.at ?? 0) && /\?|\b(?:what|how|when|why|tell me|would you|do you|could you)\b/i.test(turn.text)) : null;
-  const pathMilestones = relationshipReady ? journeyEvents.filter((event, index, all) => event.pathId !== "call-reason" && event.pathId !== "service" && all.findIndex((item) => item.pathId === event.pathId) === index).slice(0, 5) : [];
+  const pathMilestones = relationshipReady ? journeyEvents.filter((event, index, all) => event.pathId !== "call-reason" && event.pathId !== "service" && event.pathId !== "service_recovery" && all.findIndex((item) => item.pathId === event.pathId) === index).slice(0, 5) : [];
 
   useEffect(() => {
     if (status !== "live") return;
@@ -401,7 +354,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
   useEffect(() => {
     if (status !== "live" || speaker === "customer" || !latestCustomerTurn ||
-        fastPacket?.throughCustomerTurnId !== latestCustomerTurn.id ||
+        analyzedCustomerTurnId !== latestCustomerTurn.id ||
         lastCueRenderedTurnRef.current === latestCustomerTurn.id) return;
     const frame = window.requestAnimationFrame(() => {
       lastCueRenderedTurnRef.current = latestCustomerTurn.id;
@@ -410,13 +363,13 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [fastPacket, latestCustomerTurn, speaker, status]);
+  }, [analyzedCustomerTurnId, latestCustomerTurn, speaker, status]);
 
   useEffect(() => {
     return () => {
       analysisVersionRef.current += 1;
-      analysisAbortRef.current?.abort();
       if (analysisTimerRef.current !== null) window.clearTimeout(analysisTimerRef.current);
+      if (coachingTimeoutRef.current !== null) window.clearTimeout(coachingTimeoutRef.current);
       if (previewTimerRef.current !== null) window.clearTimeout(previewTimerRef.current);
       if (openingMicTimerRef.current !== null) window.clearTimeout(openingMicTimerRef.current);
       if (speakerFallbackTimerRef.current !== null) window.clearTimeout(speakerFallbackTimerRef.current);
@@ -448,13 +401,12 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     nextItemOrderRef.current = 0;
     setDrafts({});
     setAnalysis(null);
-    setFastPacket(null);
     setCueLatencyMs(null);
     clientSpeechStoppedAtRef.current = null;
     lastCueRenderedTurnRef.current = "";
     setAnalyzedCustomerTurnId("");
-    setAnalyzedTurnId("");
-    fastPacketRef.current = null;
+    analysisRef.current = null;
+    coachingResponseIdsRef.current.clear();
     setJourneyEvents([]);
     setLatestPathId("");
     setAwaitingCustomerReply(false);
@@ -469,12 +421,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     setTranscriptOpen(true);
     setServiceProgress(0);
     resetDisplayScores();
-    setProfileOpen(false);
-    setBriefOpen(true);
+    setVerificationConfirmed(false);
   }
 
   function stopConnection(nextStatus: CallStatus = "ended") {
-    if (nextStatus === "error") cancelAnalysis();
+    cancelAnalysis();
     if (previewTimerRef.current !== null) window.clearTimeout(previewTimerRef.current);
     if (openingMicTimerRef.current !== null) window.clearTimeout(openingMicTimerRef.current);
     if (speakerFallbackTimerRef.current !== null) window.clearTimeout(speakerFallbackTimerRef.current);
@@ -501,24 +452,30 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
   function cancelAnalysis() {
     analysisVersionRef.current += 1;
+    replyTimingRef.current = null;
+    setStreamedCue(null);
+    coachingInFlightRef.current = false;
+    if (coachingTimeoutRef.current !== null) window.clearTimeout(coachingTimeoutRef.current);
+    coachingTimeoutRef.current = null;
     analysisPendingRef.current = null;
+    primaryGenerationRef.current = false;
+    typedReplyPendingRef.current = false;
+    activeCoachingIdRef.current = "";
+    clientSpeakingRef.current = false;
     if (analysisTimerRef.current !== null) window.clearTimeout(analysisTimerRef.current);
     analysisTimerRef.current = null;
-    analysisAbortRef.current?.abort();
-    analysisAbortRef.current = null;
     setAnalyzing(false);
   }
 
   function acceptAnalysis(next: Analysis | null) {
     if (!next) return;
-    setAnalysis((current) => ({
-      ...next,
-      criteria: next.criteria.map((criterion) => {
-        if (criterion.status !== "unknown") return criterion;
-        const established = current?.criteria.find((item) => item.id === criterion.id && item.status !== "unknown");
-        return established ?? criterion;
-      }),
-    }));
+    // A omitted catalog entry is not a retraction. Explicit reassessments,
+    // including conflicts and rejections, replace previous evidence immediately.
+    const previous = analysisRef.current;
+    const stable = { ...next, relationshipPaths: mergePathAssessments(previous?.relationshipPaths ?? [], next.relationshipPaths) };
+    recordInsightEvents(previous, stable, turnsRef.current);
+    analysisRef.current = stable;
+    setAnalysis(stable);
     if (next.callReason.category !== "Unclassified") {
       const evidenceCount = next.callReason.evidenceIds.length;
       const estimate = Math.min(97,
@@ -528,7 +485,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       setReasonScore((current) => Math.max(current, estimate));
     }
     const milestone = next.serviceStatus.state === "resolved" ? 100 : next.serviceStatus.state === "in_progress" ? 55 : 20;
-    setServiceProgress((current) => Math.max(current, milestone));
+    setServiceProgress(milestone);
   }
 
   function resetDisplayScores() {
@@ -538,61 +495,29 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
   function queueAnalysis(nextTurns: Turn[], activeScenarioId: string) {
     analysisPendingRef.current = { turns: nextTurns, scenarioId: activeScenarioId };
-    setAnalyzing(true);
-    setAnalysisError("");
-    if (analysisAbortRef.current) {
-      // A newer transcript is more useful than an older request still in flight.
-      analysisAbortRef.current.abort();
-      return;
-    }
+    if (channelRef.current?.readyState !== "open") return;
+    if (coachingInFlightRef.current) return;
     if (analysisTimerRef.current !== null) window.clearTimeout(analysisTimerRef.current);
-    analysisTimerRef.current = window.setTimeout(() => {
-      analysisTimerRef.current = null;
-      void runPendingAnalysis();
-    }, 300);
+    runPendingAnalysis();
   }
 
-  async function runPendingAnalysis() {
-    if (analysisAbortRef.current) return;
+  function runPendingAnalysis() {
+    analysisTimerRef.current = null;
+    const channel = channelRef.current;
     const pending = analysisPendingRef.current;
-    if (!pending) return;
+    if (!pending || coachingInFlightRef.current || channel?.readyState !== "open" || !canRunBackgroundCoaching(primaryGenerationRef.current, clientSpeakingRef.current, pending.turns)) return;
     analysisPendingRef.current = null;
-    const controller = new AbortController();
-    analysisAbortRef.current = controller;
-    const version = analysisVersionRef.current;
+    coachingInFlightRef.current = true;
     setAnalyzing(true);
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenarioId: pending.scenarioId, turns: pending.turns }),
-        signal: controller.signal,
-      });
-      const payload = await response.json() as Analysis & { error?: string };
-      if (!response.ok) throw new Error(payload.error || "Insight analysis is unavailable.");
-      if (version === analysisVersionRef.current && !controller.signal.aborted) {
-        acceptAnalysis(payload as Analysis);
-        setAnalyzedCustomerTurnId(pending.turns.findLast((turn) => turn.role === "customer")?.id ?? "");
-        setAnalyzedTurnId(pending.turns.at(-1)?.id ?? "");
-        setAnalysisError("");
-      }
-    } catch (error) {
-      if (version === analysisVersionRef.current && !controller.signal.aborted && !analysisPendingRef.current) {
-        setAnalysisError(error instanceof Error ? error.message : "Insight analysis is unavailable.");
-      }
-    } finally {
-      if (analysisAbortRef.current === controller) {
-        analysisAbortRef.current = null;
-        if (analysisPendingRef.current) {
-          analysisTimerRef.current = window.setTimeout(() => {
-            analysisTimerRef.current = null;
-            void runPendingAnalysis();
-          }, 100);
-        } else {
-          setAnalyzing(false);
-        }
-      }
-    }
+    setAnalysisError("");
+    channel.send(JSON.stringify(coachingRequest(pending.turns, analysisVersionRef.current)));
+    coachingTimeoutRef.current = window.setTimeout(() => {
+      coachingInFlightRef.current = false;
+      setAnalyzing(false);
+      setAnalysisError("Cue update delayed. Keeping the previous cards.");
+      cancelBackgroundCoaching();
+      if (analysisPendingRef.current) runPendingAnalysis();
+    }, 30000);
   }
 
   function itemOrder(id: string) {
@@ -605,22 +530,22 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     return order;
   }
 
-  function recordFastEvents(previous: FastPacket | null, current: FastPacket, nextTurns: Turn[]) {
+  function recordInsightEvents(previous: Analysis | null, current: Analysis, nextTurns: Turn[]) {
     const newEvents: JourneyEvent[] = [];
     const fromEvidence = (pathId: string, title: string, state: string, ids: string[]) => {
-      const source = [...nextTurns].reverse().find((turn) => turn.role === "customer" && ids.includes(turn.id));
+      const source = [...nextTurns].reverse().find((turn) => ids.includes(turn.id) && (pathId === "service" || turn.role === "customer"));
       if (!source) return;
       newEvents.push({ id: `${pathId}-${state}-${source.id}`, pathId, title, state, quote: source.text.slice(0, 175), evidenceIds: [source.id], at: source.at });
     };
-    if (current.callReason && !previous?.callReason) {
+    if (current.callReason.category !== "Unclassified" && (!previous || previous.callReason.category === "Unclassified")) {
       fromEvidence("call-reason", "Call reason identified", current.callReason.reason, current.callReason.evidenceIds);
     }
-    if (current.serviceState === "resolved" && previous?.serviceState !== "resolved") {
-      fromEvidence("service", "Service request answered", "Resolved", [current.throughCustomerTurnId]);
+    if (current.serviceStatus.state === "resolved" && previous?.serviceStatus.state !== "resolved") {
+      fromEvidence("service", "Service request answered", "Resolved", current.serviceStatus.evidenceIds);
     }
-    if (current.serviceState === "resolved") {
-      for (const path of current.paths) {
-        const prior = previous?.serviceState === "resolved" ? previous.paths.find((item) => item.id === path.id) : undefined;
+    if (current.serviceStatus.state === "resolved") {
+      for (const path of current.relationshipPaths.filter(path => path.status === "emerging" || path.status === "explore" || path.status === "hold")) {
+        const prior = previous?.serviceStatus.state === "resolved" ? previous.relationshipPaths.find((item) => item.id === path.id) : undefined;
         if (!prior || prior.status !== path.status || path.evidenceIds.some((id) => !prior.evidenceIds.includes(id))) {
           fromEvidence(path.id, path.name, prior ? path.status === "explore" ? "Ready to explore" : "More evidence" : "New path", path.evidenceIds);
         }
@@ -628,7 +553,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     }
     if (newEvents.length) {
       setJourneyEvents((events) => [...events, ...newEvents.filter((event) => !events.some((prior) => prior.id === event.id))].slice(-48));
-      const latestPath = newEvents.findLast((event) => event.pathId !== "call-reason" && event.pathId !== "service");
+      const latestPath = newEvents.findLast((event) => event.pathId !== "call-reason" && event.pathId !== "service" && event.pathId !== "service_recovery");
       if (latestPath) setLatestPathId(latestPath.pathId);
     }
   }
@@ -665,10 +590,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     turnsRef.current = nextTurns;
     setTurns(nextTurns);
     if (nextTurns.some((entry) => entry.role === "customer")) {
-      const nextFastPacket = computeFastPacket(activeScenarioId, nextTurns);
-      recordFastEvents(fastPacketRef.current, nextFastPacket, nextTurns);
-      fastPacketRef.current = nextFastPacket;
-      setFastPacket(nextFastPacket);
       if (role === "customer") setCueLatencyMs(null);
       const opening = OPENING_REASONS[activeScenarioId];
       if (role === "customer" && opening?.pattern.test(text)) {
@@ -683,14 +604,21 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         setServiceProgress((current) => Math.max(current, 20));
       }
     }
-    if (role === "customer") setBriefOpen(false);
+    if (role === "representative" && nextTurns.some(entry => entry.role === "customer")) {
+      // Jordan’s actual Realtime question is authoritative.
+      // A slower assessment must not show an unrelated question as already asked.
+      const question = text.match(/[^.!?]+\?/g)?.at(-1)?.trim().replace(/^[”’"\s]+/, "");
+      if (question) {
+        setStreamedCue({ serviceStatus: { state: analysisRef.current?.serviceStatus.state ?? "in_progress" }, representativeGuidance: { question, nextStep: "Listen to the client's answer.", rationale: "Question from Jordan's actual response.", evidenceIds: [id], followUpQuestions: [] } });
+      }
+    }
     setDrafts((current) => {
       const next = { ...current };
       delete next[id];
       return next;
     });
     setAwaitingCustomerReply(role === "customer" && !representativeResponseActiveRef.current);
-    if (nextTurns.some((entry) => entry.role === "customer")) queueAnalysis(nextTurns, activeScenarioId);
+    if (nextTurns.some(turn => turn.role === "customer")) queueAnalysis(nextTurns, activeScenarioId);
   }
 
   function rememberCustomerItem(id: string, responseId: string) {
@@ -736,8 +664,72 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     }, delay);
   }
 
+  function cancelBackgroundCoaching() {
+    analysisVersionRef.current += 1;
+    if (activeCoachingIdRef.current && channelRef.current?.readyState === "open") {
+      channelRef.current.send(JSON.stringify({ type: "response.cancel", response_id: activeCoachingIdRef.current }));
+    }
+    activeCoachingIdRef.current = "";
+    coachingInFlightRef.current = false;
+    if (coachingTimeoutRef.current !== null) window.clearTimeout(coachingTimeoutRef.current);
+    coachingTimeoutRef.current = null;
+    analysisPendingRef.current = null;
+    setAnalyzing(false);
+  }
+
+  function requestTypedResponse() {
+    if (!typedReplyPendingRef.current || primaryGenerationRef.current || representativeResponseActiveRef.current || channelRef.current?.readyState !== "open") return;
+    typedReplyPendingRef.current = false;
+    primaryGenerationRef.current = true;
+    if (replyTimingRef.current) replyTimingRef.current.requestMs = Math.round(performance.now() - replyTimingRef.current.started);
+    channelRef.current.send(JSON.stringify(spokenReplyRequest()));
+  }
+
   function handleRealtimeEvent(event: Record<string, unknown>, activeScenarioId: string) {
     const type = String(event.type ?? "");
+    const privateResponse = event.response as { id?: string; status?: string; metadata?: Record<string, string>; output?: Array<{ type?: string; name?: string; arguments?: string }> } | undefined;
+    if (privateResponse?.metadata?.topic === "relationship_coaching") {
+      const current = Number(privateResponse.metadata.version) === analysisVersionRef.current;
+      if (privateResponse.id) {
+        coachingResponseIdsRef.current.add(privateResponse.id);
+        if (type === "response.created") {
+          if (!current || primaryGenerationRef.current || clientSpeakingRef.current) {
+            channelRef.current?.send(JSON.stringify({ type: "response.cancel", response_id: privateResponse.id }));
+          } else activeCoachingIdRef.current = privateResponse.id;
+        }
+      }
+      if (type === "response.done" && current) {
+        if (coachingTimeoutRef.current !== null) window.clearTimeout(coachingTimeoutRef.current);
+        coachingTimeoutRef.current = null;
+        activeCoachingIdRef.current = "";
+        coachingInFlightRef.current = false;
+        try {
+          const result = privateResponse.output?.find(item => item.type === "function_call" && item.name === "publish_relationship_insights");
+          if (privateResponse.status === "completed" && result?.arguments && privateResponse.metadata.throughTurnId === turnsRef.current.at(-1)?.id) {
+            const insights = parseRealtimeInsights(result.arguments, turnsRef.current);
+            acceptAnalysis(insights);
+            // Never overwrite the question Jordan actually asked with a later assessment.
+            setStreamedCue(currentCue => currentCue ? { ...currentCue, serviceStatus: insights.serviceStatus } : null);
+            setAnalyzedCustomerTurnId(privateResponse.metadata.throughCustomerTurnId);
+            setAnalysisError("");
+          }
+        } catch {
+          setAnalysisError("The evidence update could not be read. Keeping the previous cards.");
+        }
+        setAnalyzing(false);
+        runPendingAnalysis();
+      }
+      return;
+    }
+    if (coachingResponseIdsRef.current.has(String(event.response_id ?? ""))) return;
+    if (type === "output_audio_buffer.started") {
+      const timing = replyTimingRef.current;
+      if (timing && timing.requestMs !== null && !timing.audioStarted) {
+        timing.audioStarted = true;
+        console.info("Realtime reply timing " + JSON.stringify({ cueMs: timing.cueMs, requestMs: timing.requestMs, audioMs: Math.round(performance.now() - timing.started) }));
+      }
+      return;
+    }
     if (type === "output_audio_buffer.stopped") {
       if (speakerFallbackTimerRef.current !== null) window.clearTimeout(speakerFallbackTimerRef.current);
       speakerFallbackTimerRef.current = null;
@@ -747,6 +739,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       if (!openingResponseIdRef.current || !responseId || responseId === openingResponseIdRef.current) {
         releaseOpeningMic();
       }
+      requestTypedResponse();
       return;
     }
     if (type === "input_audio_buffer.committed") {
@@ -764,13 +757,19 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       return;
     }
     if (type === "input_audio_buffer.speech_started") {
+      cancelBackgroundCoaching();
+      typedReplyPendingRef.current = false;
       clientSpeechStoppedAtRef.current = null;
+      clientSpeakingRef.current = true;
       setSpeaker("customer");
       setAwaitingCustomerReply(false);
       return;
     }
     if (type === "input_audio_buffer.speech_stopped") {
+      clientSpeakingRef.current = false;
+      primaryGenerationRef.current = true;
       clientSpeechStoppedAtRef.current = performance.now();
+      replyTimingRef.current = { started: performance.now(), cueMs: null, requestMs: null, audioStarted: false };
       setSpeaker(null);
       setAwaitingCustomerReply(true);
       return;
@@ -780,6 +779,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       if (openingMicRef.current && !openingResponseIdRef.current && typeof response?.id === "string") {
         openingResponseIdRef.current = response.id;
       }
+      primaryGenerationRef.current = true;
+      if (replyTimingRef.current && replyTimingRef.current.requestMs === null) replyTimingRef.current.requestMs = Math.round(performance.now() - replyTimingRef.current.started);
       representativeResponseActiveRef.current = true;
       setSpeaker("representative");
       setAwaitingCustomerReply(false);
@@ -826,11 +827,25 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         }
       }
       responseItemIdsRef.current.delete(responseId);
+      primaryGenerationRef.current = false;
+      runPendingAnalysis();
       return;
     }
     if (type === "error") {
-      const info = event.error as { message?: string } | undefined;
+      const info = event.error as { message?: string; event_id?: string } | undefined;
+      if (info?.event_id?.startsWith("coaching-")) {
+        coachingInFlightRef.current = false;
+        if (coachingTimeoutRef.current !== null) window.clearTimeout(coachingTimeoutRef.current);
+        setAnalyzing(false);
+        setAnalysisError("Cue update unavailable. Keeping the previous cards.");
+        activeCoachingIdRef.current = "";
+        return;
+      }
       setCallError(info?.message ?? "The live session reported an error.");
+      primaryGenerationRef.current = false;
+      representativeResponseActiveRef.current = false;
+      setAwaitingCustomerReply(false);
+      setSpeaker(null);
       return;
     }
     const isRepresentative = type.startsWith("response.output_audio_transcript.");
@@ -847,6 +862,18 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       if (completeIdsRef.current.has(id)) return;
       const delta = String(event.delta ?? "");
       if (!delta) return;
+      if (isRepresentative) {
+        const pending = pendingCustomerItemsRef.current.get(id);
+        const index = Number(event.content_index ?? 0);
+        if (pending) {
+          const text = (pending.parts.get(index) ?? "") + delta;
+          pending.parts.set(index, text);
+          const question = text.match(/[^.!?]+\?/g)?.at(-1)?.trim();
+          if (question && turnsRef.current.some(turn => turn.role === "customer")) {
+            setStreamedCue({ serviceStatus: { state: analysisRef.current?.serviceStatus.state ?? "in_progress" }, representativeGuidance: { question, nextStep: "Listen to the client's answer.", rationale: "Question from Jordan's live response.", evidenceIds: [], followUpQuestions: [] } });
+          }
+        }
+      }
       setDrafts((current) => {
         const previous = current[id];
         return {
@@ -899,18 +926,16 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     setTranscriptOpen(true);
     setServiceProgress(0);
     resetDisplayScores();
-    setProfileOpen(false);
     setPreviewMode(false);
     setCallError("");
     setAnalysisError("");
     setAnalysis(null);
-    setFastPacket(null);
     setCueLatencyMs(null);
     clientSpeechStoppedAtRef.current = null;
     lastCueRenderedTurnRef.current = "";
     setAnalyzedCustomerTurnId("");
-    setAnalyzedTurnId("");
-    fastPacketRef.current = null;
+    analysisRef.current = null;
+    coachingResponseIdsRef.current.clear();
     setJourneyEvents([]);
     setLatestPathId("");
     setTurns([]);
@@ -939,7 +964,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioId: activeScenarioId }),
       });
-      const tokenPayload = await tokenResponse.json() as { clientSecret?: string; error?: string };
+      const tokenPayload = await tokenResponse.json() as { clientSecret?: string; representativeInstructions?: string; error?: string };
       if (!tokenResponse.ok) throw new Error(tokenPayload.error || "Could not start the live representative.");
       const ephemeral = String(tokenPayload.clientSecret ?? "");
       if (!ephemeral) throw new Error("The live session did not return a client secret.");
@@ -1010,7 +1035,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         body: offer.sdp,
       });
       if (!answerResponse.ok) {
-        throw new Error("OpenAI could not connect the live representative (" + answerResponse.status + ").");
+        throw new Error(openAIConnectionError(answerResponse.status, await answerResponse.text()));
       }
       await peer.setRemoteDescription({
         type: "answer",
@@ -1042,10 +1067,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         content: [{ type: "input_text", text }],
       },
     }));
-    channel.send(JSON.stringify({
-      type: "response.create",
-      response: { output_modalities: ["audio"] },
-    }));
+    cancelBackgroundCoaching();
+    replyTimingRef.current = { started: performance.now(), cueMs: null, requestMs: null, audioStarted: false };
+    typedReplyPendingRef.current = true;
+    // Request audio immediately. Background assessment waits for primary generation.
+    requestTypedResponse();
     commitTurn("typed-" + Date.now(), "customer", text, scenarioId);
     setTypedReply("");
   }
@@ -1071,7 +1097,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
       <div className="app-content">
         <header className="app-topbar">
-          <p>Advisor-grade insights.<br />In the moment.</p>
+          <p>Relationship Copilot<small>Listen closely. Connect confidently.</small></p>
           <div className="app-topbar-actions">
             <span className="training-label"><span /> TRAINING SIMULATION</span>
             <div className={"top-speaker " + (speaker ?? (waitingForRepresentative ? "thinking" : "idle"))} role="status" aria-live="polite"><span className="top-speaker-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></span><span>{speaker === "customer" ? "You are speaking" : speaker === "representative" ? "Jordan speaking" : waitingForRepresentative ? "Jordan preparing reply" : status === "live" ? "Your turn" : "Audio ready"}</span></div>
@@ -1089,7 +1115,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
             <strong>{selected?.callerName ?? "New caller"}</strong>
             <span>{selected ? "You play the client · Jordan is the AI representative" : "Choose a fresh client role to begin"}</span>
           </div>
-          <div className="call-strip-random"><Sparkles size={17} /><span><strong>Live representative</strong><small>New client role each call</small></span></div>
+          <CallWaveform speaker={speaker} waiting={waitingForRepresentative} />
           <div className="call-strip-actions">
             {status === "live" || status === "preview" ? (
               <button className="strip-end" type="button" onClick={() => stopConnection("ended")}><PhoneOff size={16} /> {status === "preview" ? "Stop Replay" : "End Call"}</button>
@@ -1099,11 +1125,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           </div>
         </div>
 
-        {selected?.profile && <CustomerProfileStrip name={selected.callerName} age={selected.age} profile={selected.profile} turns={turns} expanded={profileOpen} onToggle={() => setProfileOpen((open) => !open)} />}
+
 
         {callError && <div className="call-error" role="alert"><CircleAlert size={17} />{callError}</div>}
 
-        <main className={"call-grid insight-focus" + (transcriptOpen ? " transcript-open" : "")}>
+        <main className={"call-grid insight-focus" + (transcriptOpen ? " transcript-open" : "") + (selected?.profile ? " with-profile" : "")}>
           {transcriptOpen && <section className="transcript-pane" aria-label="Conversation">
             <div className="pane-tabs">
               <button type="button" className={centerTab === "transcript" ? "active" : ""} onClick={() => setCenterTab("transcript")}>Live Transcript</button>
@@ -1114,7 +1140,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
             {centerTab === "transcript" ? (
               <>
-                {selected?.clientBrief && <section className={"client-role-brief" + (briefOpen ? " open" : "")} aria-label="Your client role"><button type="button" className="client-role-brief-toggle" onClick={() => setBriefOpen((open) => !open)} aria-expanded={briefOpen}><span>YOUR ROLE · {selected.callerName}</span><span>{briefOpen ? "Hide brief" : "View brief"} <ChevronDown size={15} /></span></button>{briefOpen && <div className="client-role-brief-body"><p>{selected.clientBrief.situation}</p><strong>Share these details when Jordan asks</strong><ul>{selected.clientBrief.ifAsked.map((fact) => <li key={fact}>{fact}</li>)}</ul><small>Speak naturally as the client. Jordan only has the synthetic service record; your broader goals emerge from what you say.</small></div>}</section>}
                 {analysis?.tags.length ? <div className="live-tags">{analysis.tags.map((tag) => <button type="button" key={tag.id} className={"live-tag kind-" + tag.kind} onClick={() => jumpToEvidence(tag.evidenceIds)}>{tag.label}</button>)}</div> : null}
                 <div className="transcript-feed" ref={transcriptFeedRef}>
                   {turns.length === 0 && draftList.length === 0 ? (
@@ -1151,21 +1176,13 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
             <div className="pane-tabs">
               <button type="button" className={insightTab === "insights" ? "active" : ""} onClick={() => setInsightTab("insights")}>AI Insights</button>
               <button type="button" className={insightTab === "references" ? "active" : ""} onClick={() => setInsightTab("references")}>References</button>
-              <span className="pane-tab-spacer" /><span className="capture-indicator"><span className={status === "live" ? "on" : ""} /> {analyzing ? "UPDATING" : status === "live" ? "LIVE" : "READY"}</span><button type="button" className="transcript-toggle" onClick={() => setTranscriptOpen((open) => !open)}>{transcriptOpen ? "Hide transcript" : "Show transcript"}</button>
+              <span className="pane-tab-spacer" /><span className="capture-indicator"><span className={status === "live" ? "on" : ""} /> {analyzing ? "ASSESSING" : status === "live" ? "LIVE" : "READY"}</span><button type="button" className="transcript-toggle" onClick={() => setTranscriptOpen((open) => !open)}>{transcriptOpen ? "Hide transcript" : "Show transcript"}</button>
             </div>
             {insightTab === "insights" ? (
               <div className="right-feed decision-view">
-                <CallReasonVisual analysis={analysis} quickReason={quickReason} fastReason={fastReason} score={displayReasonScore} serviceProgress={displayServiceProgress} onEvidence={jumpToEvidence} />
+                <CallReasonVisual analysis={analysis} quickReason={quickReason} fastReason={null} score={displayReasonScore} serviceProgress={displayServiceProgress} onEvidence={jumpToEvidence} />
+                {status === "ended" ? <CompletedCallSummary paths={completedPaths} turns={turns} onEvidence={jumpToEvidence} /> : <CueBoard analysis={analysis} cue={streamedCue} paths={visiblePaths} turns={turns} updating={analyzing} speaking={speaker === "customer"} onEvidence={jumpToEvidence} />}
                 {status === "ended" && <CallTransition customerTurn={pivotCustomerTurn} representativeTurn={pivotRepresentativeTurn} milestones={pathMilestones} serviceEvent={serviceEvent} onEvidence={jumpToEvidence} />}
-                <RecommendationTile key={fastPacket?.throughCustomerTurnId || "waiting"} analysis={analysis} fastPacket={fastPacket} focusedPath={focusedPath} otherPaths={visiblePaths.filter((path) => path.id !== focusedPath?.id)} serviceProgress={displayServiceProgress} ended={status === "ended"} customerSpeaking={status === "live" && speaker === "customer"} awaitingClientAnswer={status === "live" && turns.at(-1)?.role === "representative"} modelGuidanceCurrent={!!analysis && analyzedTurnId === turns.at(-1)?.id} fresh={!latestCustomerTurn || fastPacket?.throughCustomerTurnId === latestCustomerTurn.id} error={fastPacket ? "" : analysisError} latestCustomerTurn={latestCustomerTurn} latestRepresentativeTurn={latestRepresentativeTurn} evidenceTurn={recommendationEvidenceTurn} cueLatencyMs={cueLatencyMs} onEvidence={jumpToEvidence} />
-                {relationshipReady && <section className="offering-landscape" aria-label="Schwab offering paths" aria-live="polite">
-                  <div className="offering-landscape-head"><div><span>RELATIONSHIP INTELLIGENCE</span><h2>Recommended paths</h2><p>Ranked by what the customer has said. New evidence can change the order.</p></div><b>{recommendedPaths.length} supported · {watchPaths.length} on radar</b></div>
-                  <div className="recommendation-engine-banner"><Sparkles size={17} /><span>{recommendedPaths.length ? <><strong>Leading path: {recommendedPaths[0].name}</strong><small>Compare the customer evidence and next step in each tile.</small></> : <><strong>No supported offering yet</strong><small>Explore the customer&apos;s broader need before discussing a product.</small></>}</span></div>
-                  {recommendedPaths.length > 0 && <div className="offering-grid">{recommendedPaths.map((path, index) => <OfferingTile key={path.id} path={path} criteria={currentCriteria} turns={turns} current={path.id === latestPathId} rank={index + 1} onEvidence={jumpToEvidence} />)}</div>}
-                  {heldPaths.length > 0 && <div className="offering-group"><h3>Needs review</h3><div className="offering-grid">{heldPaths.map((path) => <OfferingTile key={path.id} path={path} criteria={currentCriteria} turns={turns} current={path.id === latestPathId} onEvidence={jumpToEvidence} />)}</div></div>}
-                  {watchPaths.length > 0 && <div className="offering-group watchlist"><h3>On the radar <small>Questions to test, not recommendations</small></h3><div className="offering-grid">{watchPaths.map((path) => <OfferingTile key={path.id} path={path} criteria={currentCriteria} turns={turns} current={false} onEvidence={jumpToEvidence} />)}</div></div>}
-                  <p className="offering-disclaimer">Signal confidence reflects conversation evidence. It is not a suitability or eligibility score.</p>
-                </section>}
                 {analysisError && <div className="analysis-error" role="status"><CircleAlert size={16} />{analysisError}</div>}
               </div>
             ) : (
@@ -1179,13 +1196,14 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
               </div>
             )}
           </aside>
+          {selected?.profile && <ClientProfilePanel name={selected.callerName} age={selected.age} profile={selected.profile} turns={turns} verified={verificationConfirmed || demoVerificationComplete(turns)} onVerify={() => setVerificationConfirmed(true)} />}
         </main>
 
         {status === "live" && <div className="call-composer"><span className={"mini-wave" + (speaker ? " active" : "")}><i /><i /><i /><i /></span><strong>{speaker === "customer" ? "You are speaking…" : speaker === "representative" ? "Jordan is speaking…" : waitingForRepresentative ? "Jordan preparing reply…" : "Your turn as client"}</strong><div className="typed-reply"><input value={typedReply} onChange={(event) => setTypedReply(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") sendTypedReply(); }} placeholder={micAvailable ? "Speak or type as the client…" : "Type as the client…"} aria-label="Type a reply as the client" /><button type="button" onClick={sendTypedReply} disabled={!typedReply.trim()} aria-label="Send typed reply"><Send size={17} /></button></div></div>}
 
         <footer className="call-footer">
           <div className="footer-controls"><button type="button" onClick={toggleMute} disabled={status !== "live" || !micAvailable || openingMic}>{muted ? <MicOff size={18} /> : <Mic size={18} />}{muted ? "Unmute" : "Mute"}</button><span className="footer-divider" /><span>{openingMic ? "Microphone opens after Jordan greets you" : micAvailable ? "Microphone " + (status === "live" ? "connected" : "ready") : "Type to reply"}</span>{status === "ready" && <><span className="footer-divider" /><button type="button" onClick={() => void startCall(true)}>Call Jordan by text</button></>}</div>
-          <div className="footer-status"><span className={analyzing ? "active" : ""} /><span>{analysisError ? "Deeper insight update failed · live guidance remains available" : analyzing && fastPacket ? "Live guidance ready · enriching insights" : analyzing ? "Analyzing latest turn" : waitingForRepresentative ? "Waiting for Jordan's response" : analysis ? "Insights up to date" : "Awaiting conversation"}</span></div>
+          <div className="footer-status"><span className={analyzing ? "active" : ""} /><span>{analysisError ? "Realtime coaching needs attention" : analyzing ? "Updating offering evidence in background" : waitingForRepresentative ? "Waiting for Jordan's response" : analysis ? "Insights up to date" : "Awaiting conversation"}</span></div>
         </footer>
       </div>
     </div>

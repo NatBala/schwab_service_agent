@@ -1,5 +1,6 @@
 /** Synthetic CRM context for the seven training callers. Contact counts are demo data. */
 export type CustomerProfile = {
+  portrait: "female" | "male";
   relationship: string;
   accounts: Array<{ name: string; detail: string }>;
   priorContacts: number;
@@ -10,6 +11,7 @@ export type CustomerProfile = {
 
 export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-01": {
+    portrait: "female",
     relationship: "Individual brokerage",
     accounts: [{ name: "Self-directed brokerage", detail: "$12,000 on file" }],
     priorContacts: 2,
@@ -22,6 +24,7 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-02": {
+    portrait: "female",
     relationship: "Brokerage + retirement",
     accounts: [
       { name: "Taxable brokerage", detail: "Schwab account" },
@@ -38,6 +41,7 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-03": {
+    portrait: "female",
     relationship: "Taxable investing",
     accounts: [{ name: "Taxable brokerage", detail: "$1.6 million on file" }],
     priorContacts: 3,
@@ -50,6 +54,7 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-04": {
+    portrait: "female",
     relationship: "Rollover IRA opened",
     accounts: [{ name: "Schwab Rollover IRA", detail: "Open; rollover pending" }],
     priorContacts: 1,
@@ -62,6 +67,7 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-05": {
+    portrait: "female",
     relationship: "Family account inquiry",
     accounts: [],
     priorContacts: 0,
@@ -74,6 +80,7 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-06": {
+    portrait: "female",
     relationship: "Business owner inquiry",
     accounts: [],
     priorContacts: 1,
@@ -86,6 +93,7 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-07": {
+    portrait: "female",
     relationship: "Brokerage relationship",
     accounts: [{ name: "Schwab brokerage", detail: "Beneficiary update requested" }],
     priorContacts: 2,

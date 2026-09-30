@@ -1,0 +1,18 @@
+/** Voice turns are answered by Realtime itself, independently of ASR and coaching. */
+export const LIVE_TURN_DETECTION = {
+  type: "server_vad",
+  threshold: 0.5,
+  prefix_padding_ms: 300,
+  silence_duration_ms: 400,
+  create_response: true,
+  interrupt_response: true,
+} as const;
+
+export function spokenReplyRequest() {
+  return { type: "response.create", response: { output_modalities: ["audio"] } };
+}
+
+/** ASR may arrive before or after the generated representative transcript. */
+export function canRunBackgroundCoaching(generating: boolean, clientSpeaking: boolean, turns: Array<{ role: string }>) {
+  return !generating && !clientSpeaking && turns.at(-1)?.role === "representative" && turns.some(turn => turn.role === "customer");
+}

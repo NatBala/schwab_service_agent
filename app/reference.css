@@ -874,3 +874,166 @@
 .representative-grounding { margin: 0 20px 12px 22px; padding: 11px 12px; border-left: 3px solid #4c9cd0; border-radius: 5px; background: #f1f8fd; }
 .representative-grounding span { color: #1678a6; font-size: 9px; font-weight: 850; letter-spacing: .65px; }
 .representative-grounding p { margin: 5px 0 0; color: #315b73; font-size: 11px; line-height: 1.45; }
+
+/* Cue board owns the top of a viewport-sized coaching pane. */
+.reference-studio .app-content .call-grid,
+.reference-studio .app-content:has(.customer-profile) .call-grid { flex: 1; height: 0; min-height: 0; overflow: hidden; }
+.reference-studio .app-content .call-right { min-height: 0; }
+.reference-studio .right-feed.decision-view { padding: 12px; gap: 8px; }
+@media (max-width: 700px) {
+  .reference-studio .app-content .call-grid,
+  .reference-studio .app-content:has(.customer-profile) .call-grid { height: auto; overflow: visible; flex-direction: column; }
+  .reference-studio .app-content .call-right { order: -1; }
+}
+.reference-studio .cue-board { width: 100%; flex-shrink: 0; padding: 12px; }
+.reference-studio .ask-next { margin: 8px 0; padding: 9px 12px; }
+.reference-studio .ask-next h2 { font-size: 17px; }
+.reference-studio .cue-details q { display: block; margin: 8px 0; line-height: 1.5; }
+@media (min-width: 1150px) { .compact-cue-list { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Keep all three cues visible on shorter desktop windows. */
+.reference-studio .cue-board { padding: 10px; }
+.reference-studio .ask-next { padding: 8px 11px; margin: 6px 0; }
+.reference-studio .ask-next h2 { margin: 4px 0; font-size: 16px; line-height: 1.25; }
+.reference-studio .cue-paths-heading { margin: 8px 0 6px; }
+.reference-studio .compact-cue-card { padding: 8px 9px; }
+.reference-studio .compact-cue-title h3 { font-size: 12px; line-height: 1.2; }
+.reference-studio .cue-fit { margin: 4px 0; font-size: 10.5px; line-height: 1.25; }
+.reference-studio .cue-question { font-size: 11px; line-height: 1.25; padding-top: 3px; }
+.reference-studio .cue-details { margin-top: 5px; }
+.reference-studio .cue-followups { margin-top: 7px; font-size: 11px; }
+.reference-studio .cue-footnote { margin-top: 7px; font-size: 9px; }
+
+/* Call workspace: persistent coaching, a quiet client rail, and a prominent voice strip. */
+.reference-studio { grid-template-columns: 90px minmax(0,1fr); background: #eff4f8; }
+.reference-studio .schwab-mark { width: 62px; height: 62px; margin: 18px auto; }
+.reference-studio .schwab-mark span { font-size: 17px; }
+.reference-studio .schwab-mark strong { font-size: 13px; }
+.reference-studio .rail-link { flex-direction: column; gap: 7px; padding: 16px 4px; font-size: 10px; }
+.reference-studio .rail-note { margin: auto 8px 16px; padding: 12px 6px; text-align: center; }
+.reference-studio .rail-note span { display: none; }
+.reference-studio .app-topbar { background: #f9fbfd; }
+.reference-studio .app-topbar > p { font-size: 20px; font-weight: 750; letter-spacing: -.5px; line-height: 1.3; }
+.app-topbar > p small { display: block; font-size: 11px; color: #75889b; font-weight: 500; letter-spacing: 0; margin-top: 3px; }
+.reference-studio .top-speaker { display: none; }
+.reference-studio .call-strip { grid-template-columns: 170px minmax(150px,.7fr) minmax(220px,1fr) auto; min-height: 88px; margin: 0 12px 12px; border: 0; border-radius: 14px; background: linear-gradient(110deg,#103e52,#215e83 58%,#578abb); color: #fff; box-shadow: 0 8px 20px #24496a14; }
+.reference-studio .call-strip-state { border-color: #ffffff20; gap: 12px; padding: 0 16px; }
+.reference-studio .call-state-pill { color: #e7f5ff; background: #ffffff12; border-color: #ffffff26; }
+.reference-studio .call-state-pill.live { color: #afffcf; }
+.reference-studio .call-strip-person { padding-left: 18px; }
+.reference-studio .call-strip-person strong { font-size: 15px; }
+.reference-studio .call-strip-person span { color: #c3d8e8; font-size: 10px; max-width: 210px; white-space: normal; }
+.call-waveform { display: grid; justify-items: center; gap: 4px; padding: 8px 18px; min-width: 0; }
+.wave-bars { display: flex; align-items: center; justify-content: center; gap: 3px; height: 48px; width: 100%; overflow: hidden; }
+.wave-bars i { width: 2px; flex: 0 0 2px; border-radius: 2px; background: #d8ecff; opacity: .8; transform: scaleY(.22); transition: transform .25s; }
+.call-waveform.customer .wave-bars i { background: #72ebba; animation: callVoice .65s ease-in-out infinite alternate; }
+.call-waveform.representative .wave-bars i { animation: callVoice .8s ease-in-out infinite alternate; }
+.call-waveform.thinking .wave-bars i { transform: scaleY(.35); opacity: .45; }
+.call-waveform > span { font-size: 8px; font-weight: 750; letter-spacing: 1.4px; color: #c3dfed; }
+@keyframes callVoice { from {transform: scaleY(.35)} to {transform: scaleY(1)} }
+.reference-studio .call-grid.with-profile { display: grid; grid-template-columns: minmax(0,1fr) 252px; gap: 12px; }
+.reference-studio .call-grid.with-profile.transcript-open { grid-template-columns: minmax(220px,.72fr) minmax(390px,1.6fr) 252px; }
+.reference-studio .with-profile .client-profile-rail { grid-column: 2; }
+.reference-studio .with-profile.transcript-open .client-profile-rail { grid-column: 3; }
+.client-profile-rail { grid-row: 1; min-height: 0; overflow: auto; border: 1px solid #dce7ef; border-radius: 13px; background: #fff; scrollbar-width: thin; }
+.profile-rail-heading { display: flex; align-items: center; gap: 7px; padding: 14px; color: #284b65; font-size: 12px; border-bottom: 1px solid #edf2f6; }
+.profile-rail-heading > span { margin-left: auto; color: #538273; font-size: 9px; }
+.profile-locked { padding: 30px 18px; text-align: center; }
+.locked-avatar { display: grid; place-items: center; width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 50%; background: #edf5fb; color: #7795aa; }
+.profile-locked h2 { font-size: 16px; color: #234861; }
+.profile-locked p { font-size: 12px; color: #7b8e9f; line-height: 1.6; }
+.profile-locked button { display: flex; justify-content: center; align-items: center; gap: 6px; width: 100%; margin: 20px 0 12px; padding: 11px 6px; border: 1px solid #b9d9e8; border-radius: 8px; background: #eff8fc; color: #16759b; font-size: 11px; cursor: pointer; }
+.profile-locked small { display: block; font-size: 9px; color: #97a7b4; line-height: 1.6; }
+.profile-identity { padding: 20px 16px 17px; text-align: center; background: linear-gradient(#fff,#f3f8fc); }
+.profile-identity img { width: 80px; height: 80px; border-radius: 50%; object-fit: cover; border: 4px solid #fff; box-shadow: 0 3px 15px #244e6920; }
+.profile-identity h2 { font-size: 19px; letter-spacing: -.4px; margin: 9px 0 5px; color: #234660; }
+.profile-identity p { font-size: 11px; color: #7890a2; margin: 0 0 9px; }
+.profile-identity > span { display: inline-flex; align-items: center; gap: 4px; background: #e5f6ee; color: #278065; padding: 4px 7px; font-size: 9px; border-radius: 20px; }
+.profile-section { margin: 0 15px; padding: 15px 0; border-bottom: 1px solid #edf2f6; }
+.profile-section > small { font-size: 8px; color: #6993aa; letter-spacing: 1px; font-weight: 750; }
+.profile-section p { font-size: 11px; color: #758b9d; line-height: 1.5; margin: 7px 0 0; }
+.profile-section h3, .profile-section summary { font-size: 12px; color: #284e69; margin: 0 0 8px; }
+.profile-section h3 span { float: right; color: #8ba3b4; }
+.profile-provenance { padding: 14px 16px; font-size: 9px; color: #98a8b5; line-height: 1.5; }
+.reference-studio .with-profile .compact-cue-list { grid-template-columns: 1fr; }
+@media(min-width:1500px) { .reference-studio .with-profile .compact-cue-list { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media(max-width:1100px) { .reference-studio .call-grid.with-profile.transcript-open { grid-template-columns: minmax(0,1fr) 240px; } .reference-studio .with-profile .transcript-pane { display: none; } .reference-studio .with-profile .call-right { grid-column: 1; } .reference-studio .with-profile.transcript-open .client-profile-rail { grid-column: 2; } .reference-studio .call-strip-person { display: none; } .reference-studio .call-strip { grid-template-columns: 170px minmax(200px,1fr) auto; } }
+@media(max-width:700px) { .reference-studio { grid-template-columns: 1fr; } .reference-studio .nav-rail { display: none; } .reference-studio .call-strip { grid-template-columns: 1fr auto; padding: 10px; } .call-waveform { grid-row: 2; grid-column: 1 / -1; } .reference-studio .call-grid.with-profile, .reference-studio .call-grid.with-profile.transcript-open { display: flex; height: auto; overflow: visible; } .client-profile-rail { order: 3; flex: none; } .reference-studio .with-profile .transcript-pane { display: flex; } .reference-studio .app-topbar-actions .representative-name, .reference-studio .training-label { display: none; } }
+@media(prefers-reduced-motion:reduce) { .wave-bars i { animation: none !important; transform: scaleY(.65); } }
+.reference-studio .call-strip { grid-template-columns: 220px minmax(150px,.7fr) minmax(200px,1fr) auto; }
+.reference-studio .call-strip-state time { flex: none; font-size: 14px; }
+@media(min-width:1200px) { .reference-studio .with-profile .compact-cue-list { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+@media(min-width:701px) and (max-width:1100px) { .reference-studio .call-grid.with-profile.transcript-open { grid-template-columns: minmax(185px,.65fr) minmax(310px,1.2fr) 210px; } .reference-studio .with-profile.transcript-open .transcript-pane { display: flex; grid-column: 1; } .reference-studio .with-profile.transcript-open .call-right { grid-column: 2; } .reference-studio .with-profile.transcript-open .client-profile-rail { grid-column: 3; } .reference-studio .call-strip { grid-template-columns: 220px minmax(150px,1fr) auto; } }
+@media(max-width:700px) { .reference-studio .call-strip { grid-template-columns: 1fr auto; } }
+
+/* Always-visible service context and evidence charts share the cue board viewport. */
+.live-call-reason { display: flex; align-items: center; gap: 10px; width: 100%; flex: none; padding: 11px 13px; border: 1px solid #d4e4ed; border-radius: 11px; background: #fff; }
+.reason-symbol { display: grid; place-items: center; width: 35px; height: 35px; flex: none; border-radius: 9px; color: #2675a5; background: #eaf4fb; }
+.live-reason-copy { min-width: 0; flex: 1; }
+.live-reason-copy small { display: flex; align-items: center; gap: 8px; color: #7a95a8; font-size: 8px; letter-spacing: .8px; font-weight: 750; }
+.live-reason-copy small b { padding: 2px 5px; border-radius: 4px; background: #eaf7ef; color: #41896f; font-size: 8px; font-weight: 600; letter-spacing: 0; }
+.live-reason-copy h2 { margin: 4px 0 2px; color: #214662; font-size: 14px; line-height: 1.2; }
+.live-reason-copy p { margin: 0; color: #8a9dab; font-size: 9px; }
+.live-service-progress { width: 95px; flex: none; font-size: 9px; color: #7992a4; }
+.live-service-progress > span { display: flex; justify-content: space-between; }
+.live-service-progress > div { height: 4px; margin: 6px 0; overflow: hidden; border-radius: 5px; background: #edf2f6; }
+.live-service-progress i { display: block; height: 100%; border-radius: 5px; background: #479bb9; transition: width .25s; }
+.live-service-progress button { display: flex; gap: 4px; align-items: center; padding: 0; border: 0; color: #3581a6; background: none; font-size: 9px; cursor: pointer; }
+.offering-icon { display: grid; place-items: center; width: 33px; height: 33px; flex: none; border-radius: 9px; background: #e8f2fc; color: #3d83bb; }
+.icon-automated_investing { color: #7b6ccb; background: #f0ecff; }
+.icon-schwab_plan, .icon-retirement_income { color: #419784; background: #e7f5ef; }
+.icon-charitable_giving, .icon-trust_services { color: #aa7e51; background: #fff3e6; }
+.reference-studio .compact-cue-title { gap: 6px; align-items: flex-start; }
+.reference-studio .cue-rank { display: none; }
+.reference-studio .compact-cue-title h3 { padding-top: 3px; font-size: 11px; }
+.offering-confidence-chart { margin: 9px 0 6px; color: #409b8a; }
+.offering-confidence-chart > div:first-child { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 8px; color: #8a9caa; }
+.offering-confidence-chart strong { color: #2b8b78; font-size: 11px; }
+.offering-confidence-chart svg { display: block; width: 100%; height: 17px; margin: 4px 0 0; }
+.confidence-axis { display: flex; justify-content: space-between; font-size: 7px; color: #9fb0bc; }
+.offering-confidence-chart.unknown { color: #93a5b8; }
+.offering-confidence-chart.unknown strong { font-size: 8px; color: #8297a8; }
+.hold .offering-confidence-chart { color: #c3965c; }
+.ruled_out .offering-confidence-chart { color: #a79aad; }
+.completed-path-summary { width: 100%; flex: none; border: 1px solid #dce7ef; border-radius: 12px; background: #fff; padding: 16px; }
+.completed-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.completed-summary-heading small { font-size: 8px; color: #5993a8; letter-spacing: 1px; font-weight: 700; }
+.completed-summary-heading h2 { margin: 5px 0 0; font-size: 17px; color: #234861; }
+.completed-summary-heading > span { font-size: 10px; color: #6b899f; background: #f0f6fa; padding: 5px 8px; border-radius: 6px; }
+.completed-path-summary > p { font-size: 11px; line-height: 1.5; color: #879cac; }
+.completed-path-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.completed-path-card { padding: 12px; border: 1px solid #e0eaf1; border-radius: 10px; background: #fbfdff; }
+.completed-path-card .compact-cue-title h3 { font-size: 12px; }
+.summary-path-status { display: inline-block; margin: 8px 0 0; color: #5c887e; font-size: 9px; }
+.hold .summary-path-status { color: #a6814b; }
+.ruled_out .summary-path-status { color: #a0757d; }
+.completed-path-card p { color: #768e9f; font-size: 11px; line-height: 1.5; }
+.completed-path-card button { display: flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; color: #3a87ad; font-size: 9px; cursor: pointer; }
+.completed-path-card button:disabled { opacity: .5; cursor: default; }
+.summary-next-step strong { color: #436a84; font-weight: 600; }
+.reference-studio .profile-identity { padding: 17px 14px 14px; }
+.reference-studio .profile-identity img { width: 104px; height: 104px; }
+.reference-studio .profile-identity > span.pending { background: #edf3f8; color: #7c94a7; }
+.reference-studio .profile-locked { padding: 17px 15px; text-align: left; }
+.reference-studio .profile-locked h2 { font-size: 13px; margin: 0; }
+.reference-studio .profile-locked button { margin-top: 14px; }
+.reference-studio .profile-relationship { padding: 11px 0; }
+.reference-studio .profile-relationship p { font-weight: 600; color: #496f87; }
+@media(max-width:700px) { .completed-path-list { grid-template-columns: 1fr; } .live-service-progress { width: 74px; } }
+/* Keep the portrait and account snapshot together without pushing accounts below the fold. */
+.reference-studio .profile-identity { display: grid; grid-template-columns: 76px minmax(0,1fr); grid-template-rows: auto auto auto; column-gap: 11px; align-items: center; text-align: left; padding: 17px 14px; }
+.reference-studio .profile-identity img { grid-row: 1 / 4; width: 76px; height: 76px; }
+.reference-studio .profile-identity h2 { font-size: 16px; margin: 0; }
+.reference-studio .profile-identity p { margin: 2px 0; font-size: 10px; }
+.reference-studio .profile-identity > span { font-size: 8px; width: fit-content; padding: 4px 5px; }
+@media(min-width:701px) {
+  .reference-studio .app-topbar { height: 62px; min-height: 62px; }
+  .reference-studio .call-strip { min-height: 76px; }
+  .reference-studio .call-footer { height: 38px; min-height: 38px; }
+  .reference-studio .call-composer { padding: 6px 12px; margin-top: 6px; }
+  .reference-studio .call-composer .typed-reply input { padding: 7px 10px; }
+  .reference-studio .live-call-reason { padding: 8px 11px; }
+  .reference-studio .live-call-reason .reason-symbol { width: 30px; height: 30px; }
+  .reference-studio .offering-confidence-chart { margin: 6px 0 4px; }
+  .reference-studio .offering-confidence-chart svg { height: 13px; }
+  .reference-studio .confidence-axis { display: none; }
+}
