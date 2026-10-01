@@ -1,10 +1,11 @@
-/** Voice turns are answered by Realtime itself, independently of ASR and coaching. */
+/** Coach-first turns: server VAD commits the client audio, then the app requests an
+ * LLM cue and asks Jordan to reply with that cue as a private directive. */
 export const LIVE_TURN_DETECTION = {
   type: "server_vad",
   threshold: 0.5,
   prefix_padding_ms: 300,
   silence_duration_ms: 400,
-  create_response: true,
+  create_response: false,
   interrupt_response: true,
 } as const;
 

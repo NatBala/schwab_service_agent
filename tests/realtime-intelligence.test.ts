@@ -153,8 +153,9 @@ test("wrap-up includes an offering actually discussed without claiming client fi
 
 import { demoVerificationComplete } from "../lib/demo-verification";
 import { LIVE_TURN_DETECTION, canRunBackgroundCoaching, spokenReplyRequest } from "../lib/realtime-turns";
-test("voice replies run automatically and typed replies have no coaching dependency", () => {
-  assert.equal(LIVE_TURN_DETECTION.create_response, true);
+test("voice turns are coach-first: VAD commits audio but the app requests Jordan's reply", () => {
+  assert.equal(LIVE_TURN_DETECTION.create_response, false);
+  assert.equal(LIVE_TURN_DETECTION.interrupt_response, true);
   assert.equal(LIVE_TURN_DETECTION.type, "server_vad");
   assert.ok(LIVE_TURN_DETECTION.silence_duration_ms <= 400);
   assert.deepEqual(spokenReplyRequest(), {type:"response.create",response:{output_modalities:["audio"]}});
@@ -179,4 +180,75 @@ test("profile accounts unlock only after verification consent and confirmation",
   assert.equal(demoVerificationComplete([request, {role:"customer",text:"Yes, proceed."}, {role:"representative",text:"Demo verification is complete. Let's review the account."}]), true);
   assert.equal(demoVerificationComplete([request, {role:"customer",text:"No, don't proceed."}, {role:"representative",text:"Demo verification is complete."}]), false);
   assert.equal(demoVerificationComplete([{role:"representative",text:"Demo verification is complete."}]), false);
+});
+
+import { CUE_TOOL, closePartialJson, cueDirectiveItem, cueRequest, readCue } from "../lib/live-cue";
+const cueTurns = [
+  { id: "rep0", role: "representative" as const, text: "Thank you for calling Charles Schwab. How may I help you today?", at: 0 },
+  { id: "c1", role: "customer" as const, text: "I want to set up an automatic monthly transfer into my brokerage account.", at: 3 },
+];
+const fullCue = {
+  callReason: { category: "Move Money", subcategory: "ACH", reason: "Periodic Request", confidence: "high", evidenceIds: ["c1"] },
+  stage: "servicing", serviceState: "in_progress",
+  say: "I can help with that. How much would you like to transfer each month?",
+  nextStep: "Confirm amount, date and linked bank.", rationale: "Client asked for a recurring transfer.",
+  offeringId: "", evidenceIds: ["c1"],
+};
+
+test("the live cue is a private, text-only LLM request that can hear unsent audio", () => {
+  const request = cueRequest({ version: 4, turns: cueTurns.slice(0, 1), pendingAudioItemId: "item_audio" });
+  assert.equal(request.response.conversation, "none");
+  assert.deepEqual(request.response.output_modalities, ["text"]);
+  assert.equal(request.response.metadata.topic, "live_cue");
+  assert.equal(request.response.metadata.throughTurnId, "item_audio");
+  assert.match(request.event_id, /^cue-req-4-/);
+  assert.deepEqual(request.response.input.at(-1), { type: "item_reference", id: "item_audio" });
+  assert.equal(request.response.tool_choice.name, CUE_TOOL.name);
+  assert.equal(Object.keys(CUE_TOOL.parameters.properties)[0], "callReason", "call reason streams first");
+  assert.equal(cueRequest({ version: 5, turns: cueTurns }).response.input.length, 1, "typed turns need no audio reference");
+});
+
+test("the call reason is readable from the stream as soon as its object closes", () => {
+  const text = JSON.stringify(fullCue);
+  const cut = text.indexOf('"stage"') + 3;
+  const early = readCue(text.slice(0, cut), cueTurns);
+  assert.equal(early?.callReason?.reason, "Periodic Request");
+  assert.equal(early?.say, "");
+  const beforeClose = readCue(text.slice(0, text.indexOf('"evidenceIds"') + 5), cueTurns);
+  assert.equal(beforeClose?.callReason, null, "an unfinished reason is never shown");
+  const midSay = readCue(text.slice(0, text.indexOf("transfer each")), cueTurns);
+  assert.ok(midSay?.say.startsWith("I can help with that. How much"));
+});
+
+test("cue validation rejects fabricated taxonomy labels and representative-only evidence", () => {
+  assert.equal(readCue(JSON.stringify(fullCue), cueTurns, "", true)?.callReason?.taxonomySourceLine, 524);
+  const invented = { ...fullCue, callReason: { ...fullCue.callReason, reason: "Made Up Reason" } };
+  assert.equal(readCue(JSON.stringify(invented), cueTurns, "", true)?.callReason, null);
+  const repOnly = { ...fullCue, callReason: { ...fullCue.callReason, evidenceIds: ["rep0"] } };
+  assert.equal(readCue(JSON.stringify(repOnly), cueTurns, "", true)?.callReason, null);
+  const audio = { ...fullCue, callReason: { ...fullCue.callReason, evidenceIds: ["item_audio"] } };
+  assert.equal(readCue(JSON.stringify(audio), cueTurns.slice(0, 1), "item_audio", true)?.callReason?.reason, "Periodic Request");
+  assert.equal(readCue(JSON.stringify({ ...fullCue, offeringId: "not_a_product" }), cueTurns, "", true)?.offeringId, "");
+  assert.equal(readCue('{"say":"half', cueTurns, "", true), null, "incomplete output is never treated as final");
+});
+
+test("partial JSON repair handles escapes, braces in strings and dangling keys", () => {
+  assert.deepEqual(closePartialJson('{"say":"He said \\"hi\\" {ok}'), { say: 'He said "hi" {ok}' });
+  assert.deepEqual(closePartialJson('{"a":1,"b"'), { a: 1 });
+  assert.deepEqual(closePartialJson('{"a":[1,2'), { a: [1, 2] });
+  assert.equal(closePartialJson(""), null);
+});
+
+test("the cue becomes a private system directive for Jordan's next reply", () => {
+  const cue = readCue(JSON.stringify({ ...fullCue, stage: "discovery", offeringId: "automated_investing" }), cueTurns, "", true)!;
+  const event = cueDirectiveItem(cue, "cue_1");
+  assert.equal(event.type, "conversation.item.create");
+  assert.equal(event.item.role, "system");
+  assert.equal(event.item.id, "cue_1");
+  const text = event.item.content[0].text;
+  assert.match(text, /Do not read this aloud/);
+  assert.match(text, /How much would you like to transfer/);
+  assert.match(text, /Schwab Intelligent Portfolios/);
+  const servicing = cueDirectiveItem({ ...cue, stage: "servicing" }, "cue_2").item.content[0].text;
+  assert.doesNotMatch(servicing, /Intelligent Portfolios/, "no offering push while servicing");
 });

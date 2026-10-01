@@ -12,19 +12,22 @@ const icons: Record<string, LucideIcon> = {
   fractional_shares: Coins, trading_tools: Monitor, service_recovery: Headphones,
   inherited_ira_support: CalendarClock,
 };
-export function OfferingIcon({ id }: { id: string }) {
+export function OfferingIcon({ id, size = 19 }: { id: string; size?: number }) {
   const Icon = icons[id] ?? ChartPie;
-  return <span className={"offering-icon icon-" + id} aria-hidden="true"><Icon size={19} strokeWidth={1.8} /></span>;
+  return <span className={"offering-icon icon-" + id} aria-hidden="true"><Icon size={size} strokeWidth={1.8} /></span>;
 }
-export function ConfidenceChart({ value, unknown = false }: { value: number | null; unknown?: boolean }) {
+
+/** Radial evidence meter. Unknown relevance is drawn without a percentage. */
+export function ConfidenceRing({ value, unknown = false, size = 54 }: { value: number | null; unknown?: boolean; size?: number }) {
   const score = Math.max(0, Math.min(100, value ?? 0));
-  return <div className={"offering-confidence-chart" + (unknown ? " unknown" : "")}>
-    <div><span>Evidence confidence</span><strong>{unknown ? "Not established" : `${score}%`}</strong></div>
-    <svg viewBox="0 0 200 17" role="img" aria-label={unknown ? "Confidence not established; discovery candidate" : `Conversation evidence confidence ${score} percent`}>
-      <rect x="0" y="2" width="200" height="6" rx="3" fill="currentColor" opacity=".12" />
-      {!unknown && <rect x="0" y="2" width={score * 2} height="6" rx="3" fill="currentColor" />}
-      {[0, 50, 100].map(tick => <line key={tick} x1={tick * 1.98 + 1} x2={tick * 1.98 + 1} y1="11" y2="15" stroke="currentColor" opacity=".3" />)}
+  const radius = 21;
+  const circumference = 2 * Math.PI * radius;
+  return <div className={"confidence-ring" + (unknown ? " unknown" : "")} style={{ width: size, height: size }}
+    role="img" aria-label={unknown ? "Evidence not yet established" : `Conversation evidence ${score} percent`}>
+    <svg viewBox="0 0 50 50">
+      <circle cx="25" cy="25" r={radius} className="ring-track" />
+      {!unknown && <circle cx="25" cy="25" r={radius} className="ring-value" strokeDasharray={circumference} strokeDashoffset={circumference * (1 - score / 100)} />}
     </svg>
-    <div className="confidence-axis" aria-hidden="true"><span>0</span><span>50</span><span>100</span></div>
+    <span>{unknown ? "?" : score}<small>{unknown ? "" : "%"}</small></span>
   </div>;
 }

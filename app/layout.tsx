@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "./reference.css";
-import "./porcelain.css";
 
 export const metadata: Metadata = {
-  title: "Signal | Relationship Call Studio",
+  title: "Relationship Copilot | Call Studio",
   description: "Practice client conversations with a live AI customer and evidence-led call intelligence.",
   icons: {
     icon: "/favicon.svg",

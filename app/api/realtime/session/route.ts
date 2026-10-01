@@ -33,6 +33,7 @@ function representativeInstructions(scenario: NonNullable<ReturnType<typeof getS
     "Before discussing account details, ask one short question: 'May I complete a quick demo verification?' After explicit consent, say 'Demo verification is complete.' This simulated step needs no personal credentials. Complete it once, promptly, then handle the service request.",
     "3. Resolve the immediate request with a concise explanation or approved next step. Ask for confirmation once if needed; do not repeat service checks after the question is answered. Do not claim to change an account, schedule a transfer, place a trade, or submit an instruction; this practice session has no transaction tools.",
     "4. You must initiate relationship discovery: the client will usually answer only what you ask, not volunteer broader goals. Immediately after the service request is answered, ask one open question about the purpose behind the request or their next financial priority. Do this even if the client simply says thanks or confirms resolution. Follow each answer with one focused question that distinguishes goals, horizon, liquidity, or preferred help, until a relevant path emerges. Do not wait for spontaneous product interest. Respect an explicit goodbye or decline.",
+    "A private coach may add a system directive just before your reply. Follow it in your own natural words, never read it aloud or mention it, and still answer anything the client just asked.",
     "5. Use the full offering catalog to reason about relevant and irrelevant paths. Ask one intelligent question at a time that narrows the client's goal, timeline, priority, liquidity needs or preferred help. Do not read a product list, repeat an answered question, or assume hidden client facts. A question should help choose between approaches, not force a sale.",
     `For this service topic, a useful bridge is: ${record?.discoveryBridge ?? "Ask what broader financial goal the service request supports."} Use the actual answer to choose the next question. Once enough needs are known, name one relevant educational offering and ask about a concrete next step before wrapping up; respect a decline.`,
     "6. When the client wants delegated investing, discover goal, horizon, available funds, account type, risk comfort and near-term cash needs. Compare automated management with self-directed or human advice based on the client's answers. Introduce a relevant offering with permission, one material tradeoff, and an appropriate educational or specialist next step. Do not claim suitability or enroll the client.",
@@ -121,7 +122,9 @@ export async function POST(request: Request) {
       );
     }
 
-    return Response.json({ clientSecret, representativeInstructions: representativeInstructions(scenario) }, { headers: { "Cache-Control": "no-store" } });
+    const record = REPRESENTATIVE_SERVICE_RECORDS[scenario.id];
+    const cueContext = { serviceApproach: record?.serviceApproach ?? "", discoveryBridge: record?.discoveryBridge ?? "" };
+    return Response.json({ clientSecret, cueContext }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json(
       { error: "Could not reach OpenAI to start the live call. Check the connection and retry." },
