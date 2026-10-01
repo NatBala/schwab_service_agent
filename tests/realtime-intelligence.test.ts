@@ -272,3 +272,89 @@ test("new offerings accumulate while existing offerings retain updated assessmen
   assert.deepEqual(result.map(card => card.id), ["a", "b", "c", "d"]);
   assert.equal(result[0].status, "ruled_out");
 });
+
+import { validateTrainingAction, persistTrainingAction } from "../lib/training-actions";
+import { buildOfferingJourneys, groupOfferings } from "../lib/offering-journey";
+import { CUSTOMER_PROFILES } from "../lib/customer-profiles";
+import { SCENARIOS } from "../lib/relationship-scenarios";
+test("K has a male portrait and complete fictional CRM fields in every scenario", () => {
+  for (const profile of Object.values(CUSTOMER_PROFILES)) {
+    assert.equal(profile.portrait, "male");
+    for (const field of [profile.address, profile.book, profile.segment, profile.advisor, profile.clientId]) assert.ok(field);
+  }
+  assert.ok(SCENARIOS.every(scenario => scenario.callerName === "K"));
+});
+test("training completion requires latest explicit authorization after final review", () => {
+  const input = { offeringId: "automated_investing", kind: "open_account", accountName: "Intelligent Portfolios account", summary: "Opened the training account", steps: ["Reviewed account type", "Reviewed funding choice"], consentText: "Yes, proceed." };
+  const consent = [{id: "review", role: "representative", text: "Please confirm: may I proceed with opening this training account?"}, {id: "consent", role: "customer", text: "Yes, proceed."}];
+  assert.equal(validateTrainingAction(input, consent).consentTurnId, "consent");
+  assert.throws(() => validateTrainingAction({...input, consentText: "No, do not proceed."}, [...consent.slice(0,1), {id: "no", role: "customer", text: "No, do not proceed."}]));
+  assert.throws(() => validateTrainingAction(input, [...consent, {id: "later", role: "customer", text: "Wait, cancel that."}]));
+  assert.throws(() => validateTrainingAction(input, [{id: "interest", role: "representative", text: "Are you interested in opening an account?"}, consent[1]]));
+  assert.throws(() => validateTrainingAction({...input, offeringId: "invented"}, consent));
+});
+test("journey shows every offering's client trigger, transition and introduction", () => {
+  const transcript = [
+    {id: "bridge", role: "representative", text: "What do you want these savings to accomplish?", at: 20},
+    {id: "need", role: "customer", text: "I want retirement investing managed automatically.", at: 25},
+    {id: "intro", role: "representative", text: "Schwab Intelligent Portfolios could help with automated management.", at: 30},
+    {id: "planning", role: "representative", text: "A Financial Consultant conversation could also help with your broader plan.", at: 40},
+  ];
+  const paths = [
+    {id: "automated_investing", name: "Schwab Intelligent Portfolios", evidenceIds: ["need"], rationale: "Client wants automation", signalConfidence: 90},
+    {id: "financial_consultant", name: "Financial Consultant conversation", evidenceIds: ["need"], rationale: "Client wants retirement planning", signalConfidence: 75},
+  ];
+  const journey = buildOfferingJourneys(paths, transcript);
+  assert.equal(journey.length, 2);
+  assert.equal(journey[0].client?.id, "need");
+  assert.equal(journey[0].transition?.id, "bridge");
+  assert.equal(journey[1].introduction?.id, "planning");
+});
+test("confidence groups keep high confidence offerings ahead of other candidates", () => {
+  const groups = groupOfferings([{id: "low", signalConfidence: 45}, {id: "high", signalConfidence: 92}, {id: "unknown", signalConfidence: null}, {id: "second", signalConfidence: 80}]);
+  assert.deepEqual(groups[0].paths.map(path => path.id), ["high", "second"]);
+  assert.deepEqual(groups[1].paths.map(path => path.id), ["low", "unknown"]);
+});
+
+test("reports preserve named offerings when no background assessment completed", () => {
+  const paths = RELATIONSHIP_PATHS.map(path => ({ ...path, status: "possible", assessed: false, evidenceIds: [] }));
+  const report = callPathSummary(paths, [{id: "mention", role: "representative", text: "We can explore Intelligent Portfolios, a financial consultant, and a 529 plan."}]);
+  for (const id of ["automated_investing", "financial_consultant", "college_529"]) assert.ok(report.some(path => path.id === id));
+});
+
+import { POST as createRealtimeSession } from "../app/api/realtime/session/route";
+test("realtime session skips verification and provides the training completion tool", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENAI_API_KEY;
+  let captured: { session?: { instructions?: string; tools?: Array<{name: string}> } } = {};
+  process.env.OPENAI_API_KEY = "test-only-dummy-key";
+  globalThis.fetch = async (url, options) => {
+    assert.equal(String(url), "https://api.openai.com/v1/realtime/client_secrets");
+    captured = JSON.parse(String(options?.body));
+    return new Response(JSON.stringify({value: "test-only-session"}), {status:200});
+  };
+  try {
+    const response = await createRealtimeSession(new Request("http://localhost/api/realtime/session", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({scenarioId:"relationship-01",completedActions:[{offeringName:"Schwab Intelligent Portfolios",summary:"Training account opened",accountName:"Intelligent Portfolios account"}]})}));
+    assert.equal(response.status,200);
+    assert.ok(captured.session?.tools?.some(tool => tool.name === "complete_training_action"));
+    assert.ok(captured.session?.instructions?.includes("Skip verification questions"));
+    assert.ok(captured.session?.instructions?.includes("The tool must return success before you claim completion"));
+    assert.ok(captured.session?.instructions?.includes("Training account opened"));
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});
+
+test("training actions persist before success and repeated authorization is idempotent", () => {
+  const validated = {offeringId:"automated_investing",offeringName:"Schwab Intelligent Portfolios",kind:"open_account" as const,accountName:"Managed training account",summary:"Training account added",steps:["Reviewed funding", "Confirmed setup"],consentTurnId:"consent"};
+  let saved = "";
+  const storage = {setItem: (key: string, value: string) => { assert.equal(key, "schwab-training-actions-k-v1"); saved = value; }};
+  const first = persistTrainingAction(validated, [], "call-1", storage);
+  assert.equal(JSON.parse(saved)[0].accountName, "Managed training account");
+  const second = persistTrainingAction(validated, first.actions, "call-2", storage);
+  assert.equal(second.actions.length, 1);
+  assert.equal(second.action.id, "call-1");
+  assert.throws(() => persistTrainingAction(validated, [], "call-3", {setItem: () => { throw new Error("Storage unavailable"); }}));
+});

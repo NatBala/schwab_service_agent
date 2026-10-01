@@ -5,7 +5,6 @@ import {
   ArrowRight,
   BadgeCheck,
   Check,
-  ChevronDown,
   Compass,
   ExternalLink,
   Flag,
@@ -17,10 +16,11 @@ import {
   ShieldCheck,
   Sparkles,
   Target,
-  UserRound,
   Wrench,
   Zap,
 } from "lucide-react";
+import { buildOfferingJourneys, groupOfferings } from "@/lib/offering-journey";
+import type { TrainingAction } from "@/lib/training-actions";
 import type { CustomerProfile } from "@/lib/customer-profiles";
 import type { CueReason, CueStage, LiveCue } from "@/lib/live-cue";
 import { ConfidenceRing, OfferingIcon } from "./offering-visuals";
@@ -171,7 +171,7 @@ export function OpportunityBoard({ paths, analysis, turns, assessing, serviceDon
       <div><small>DEEPEN THE RELATIONSHIP</small><h3>Schwab offerings in play</h3></div>
       <span className={"assess-pill" + (assessing ? " on" : "")}><i />{assessing ? "AI assessing evidence" : `${paths.length} discovered`}</span>
     </div>
-    {paths.length ? <div className="offer-grid">{paths.map((path, index) => {
+    {paths.length ? <div className="offering-groups">{groupOfferings(paths).map(group => <div key={group.label}><h4 className="offering-group-label">{group.label}</h4><div className="offer-grid">{group.paths.map((path, index) => {
       const quote = turns.findLast(turn => turn.role === "customer" && path.evidenceIds.includes(turn.id))?.text;
       const unknown = path.status === "possible" || path.signalConfidence === null || !path.assessed;
       return <article key={path.id} className={"offer-card status-" + path.status + (path.focus ? " focus" : "")} style={{ animationDelay: `${index * 70}ms` }}>
@@ -194,7 +194,7 @@ export function OpportunityBoard({ paths, analysis, turns, assessing, serviceDon
           {path.id === "automated_investing" && analysis && <AutomatedCriteria criteria={analysis.criteria} onEvidence={onEvidence} />}
         </div>
       </article>;
-    })}</div> : <div className="offer-empty">
+    })}</div></div>)}</div> : <div className="offer-empty">
       <span><Target size={22} /></span>
       <div><strong>{serviceDone ? "Listening for a broader goal" : "Service first"}</strong><p>{serviceDone ? "Offerings appear as soon as the client's own words support one." : "Relationship offerings unlock after the original request is handled. The coach is tracking every answer."}</p></div>
     </div>}
@@ -220,16 +220,35 @@ export function AutomatedCriteria({ criteria, onEvidence }: { criteria: Analysis
 
 /* ───────────────────────── Wrap-up ───────────────────────── */
 
-export function CompletedCallSummary({ paths, onEvidence }: { paths: Analysis["relationshipPaths"]; onEvidence: (ids: string[]) => void }) {
-  return <section className="wrapup" aria-label="Call wrap-up">
-    <div className="section-heading"><div><small>CALL COMPLETE</small><h3>Relationship paths covered</h3></div><span className="assess-pill">{paths.length} {paths.length === 1 ? "path" : "paths"}</span></div>
-    {paths.length ? <div className="offer-grid">{paths.map(path => <article className={"offer-card status-" + path.status} key={path.id}>
-      <div className="offer-top"><OfferingIcon id={path.id} /><div className="offer-title"><h4>{path.name}</h4><span>{path.family}</span></div><ConfidenceRing value={path.signalConfidence} unknown={path.status === "possible" || !path.evidenceIds.length} /></div>
-      <span className={"offer-status " + path.status}>{STATUS_LABEL[path.status]}</span>
-      <p className="offer-why">{path.evidenceIds.length ? path.rationale : "Mentioned in the conversation; client fit has not been established."}</p>
-      {path.evidenceIds.length > 0 && <div className="offer-ask"><small>NEXT</small><span>{path.nextStep}</span></div>}
-      {path.evidenceIds.length > 0 && <button type="button" className="ghost-link" onClick={() => onEvidence(path.evidenceIds)}>Conversation evidence <ArrowRight size={12} /></button>}
-    </article>)}</div> : <div className="offer-empty"><span><Target size={22} /></span><div><strong>No relationship path established</strong><p>The call stayed focused on the original service request.</p></div></div>}
+export function CompletedCallSummary({ paths, turns, actions, serviceStatus, updating, onEvidence }: {
+  paths: Analysis["relationshipPaths"]; turns: Turn[]; actions: TrainingAction[]; serviceStatus?: Analysis["serviceStatus"]; updating: boolean; onEvidence: (ids: string[]) => void;
+}) {
+  const journeys = buildOfferingJourneys(paths, turns);
+  return <section className="wrapup" aria-label="Call and offering journey report">
+    <div className="section-heading"><div><small>CALL COMPLETE</small><h3>Call &amp; offering journey</h3></div><span className="assess-pill">{updating ? "Final assessment in progress" : `${paths.length} offerings`}</span></div>
+    <div className="call-report-context"><strong>Original call</strong><p>{turns.find(turn => turn.role === "customer")?.text ?? "No client statement was captured."}</p><small>{turns.length} transcript entries · {actions.length} completed training {actions.length === 1 ? "action" : "actions"}</small></div>
+    <div className="call-report-context"><strong>Service journey</strong><p>{serviceStatus?.summary || "The transcript remains available for review; service resolution has not been assessed."}</p><small>{serviceStatus?.state === "resolved" ? "Original service request resolved" : serviceStatus?.state === "in_progress" ? "Service was still in progress" : "Service outcome not yet established"}</small>
+      {serviceStatus?.evidenceIds.map(id => turns.find(turn => turn.id === id)).filter((turn): turn is Turn => !!turn).map(turn => <button className="report-service-quote" type="button" key={turn.id} onClick={() => onEvidence([turn.id])}><small>{turn.role === "customer" ? "CLIENT" : "REPRESENTATIVE"} · {timeLabel(turn.at)}</small><q>{turn.text}</q></button>)}
+    </div>
+    {groupOfferings(paths).map(group => <div key={group.label} className="offering-report-group"><h4 className="offering-group-label">{group.label}</h4>{group.paths.map(path => {
+      const journey = journeys.find(item => item.path.id === path.id)!;
+      const completed = actions.filter(action => action.offeringId === path.id);
+      return <article className={"offer-card offering-journey status-" + path.status} key={path.id}>
+        <div className="offer-top"><OfferingIcon id={path.id} /><div className="offer-title"><h4>{path.name}</h4><span>{path.family}</span></div><ConfidenceRing value={path.signalConfidence} unknown={!path.assessed || path.signalConfidence === null} /></div>
+        <span className={"offer-status " + path.status}>{completed.length ? "Completed in training account" : STATUS_LABEL[path.status]}</span>
+        <div className="offering-timeline">
+          {journey.transition && <button type="button" onClick={() => onEvidence([journey.transition!.id])}><small>REPRESENTATIVE TRANSITION · {timeLabel(journey.transition.at)}</small><q>{journey.transition.text}</q></button>}
+          {journey.client ? <button type="button" onClick={() => onEvidence([journey.client!.id])}><small>{journey.clientIsEvidence ? "CLIENT NEED / POINT OF CHANGE" : "CLIENT CONTEXT BEFORE INTRODUCTION"} · {timeLabel(journey.client.at)}</small><q>{journey.client.text}</q></button> : <p>No client evidence was captured for this offering.</p>}
+          <div><small>WHY THE OFFERING BECAME RELEVANT</small><p>{path.evidenceIds.length ? path.rationale : "The offering was discussed; a supporting client need has not yet been established."}</p></div>
+          {journey.introduction ? <button type="button" onClick={() => onEvidence([journey.introduction!.id])}><small>OFFERING INTRODUCED · {timeLabel(journey.introduction.at)}</small><q>{journey.introduction.text}</q></button> : <p>The coach identified this path; no named introduction was captured.</p>}
+          {journey.evidence.filter(turn => turn.id !== journey.client?.id && turn.id !== journey.introduction?.id && turn.id !== journey.transition?.id).map(turn => <button type="button" key={turn.id} onClick={() => onEvidence([turn.id])}><small>{turn.role === "customer" ? "CLIENT ENGAGEMENT" : "REPRESENTATIVE FOLLOW-UP"} · {timeLabel(turn.at)}</small><q>{turn.text}</q></button>)}
+          {completed.map(action => <div className="action-completed" key={action.id}><small>COMPLETED ACTION</small><p>{action.summary}</p>{turns.find(turn => turn.id === action.consentTurnId) && <q>{turns.find(turn => turn.id === action.consentTurnId)!.text}</q>}<ol>{action.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></div>)}
+          {!completed.length && path.nextStep && <div><small>NEXT STEP</small><p>{path.nextStep}</p></div>}
+        </div>
+      </article>;
+    })}</div>)}
+    {!paths.length && <div className="offer-empty"><Target size={22} /><div><strong>No offering introduced</strong><p>The journey remains focused on the original service request. {updating ? "The final assessment is checking the full transcript." : "No offering evidence was captured."}</p></div></div>}
+    {actions.filter(action => action.offeringId === "service_request").map(action => <div className="action-completed" key={action.id}><strong>Service completed</strong><p>{action.summary}</p></div>)}
   </section>;
 }
 
@@ -259,14 +278,15 @@ export function CallTransition({ customerTurn, representativeTurn, milestones, s
 
 /* ───────────────────────── Client profile ───────────────────────── */
 
-export function ClientProfilePanel({ name, age, profile, turns, verified, onVerify }: {
-  name: string; age: number; profile: CustomerProfile; turns: Turn[]; verified: boolean; onVerify: () => void;
+export function ClientProfilePanel({ name, age, profile, actions, turns, verified, onVerify }: {
+  name: string; age: number; profile: CustomerProfile; actions: TrainingAction[]; turns: Turn[]; verified: boolean; onVerify: () => void;
 }) {
+  const advisorChange = actions.findLast(action => ["financial_consultant", "wealth_advisory"].includes(action.offeringId) && ["schedule", "enroll"].includes(action.kind));
   const words = turns.filter(turn => turn.role === "customer").map(turn => turn.text.toLowerCase()).join(" ");
   const learned = profile.discoverable.filter(fact => fact.phrases.some(phrase => words.includes(phrase.toLowerCase())));
   return <aside className="client-panel" aria-label="Client profile">
     <div className="client-hero">
-      <div className="client-photo"><Image width={84} height={84} priority unoptimized src={profile.portrait === "male" ? "/profiles/client-male.png" : "/profiles/client-female.png"} alt={`Fictional training portrait for ${name}`} /><span className={verified ? "ok" : ""}>{verified ? <Check size={12} /> : <Lock size={11} />}</span></div>
+      <div className="client-photo"><Image width={84} height={84} priority unoptimized src="/profiles/client-male.png" alt={`Fictional training portrait for ${name}`} /><span className={verified ? "ok" : ""}>{verified ? <Check size={12} /> : <Lock size={11} />}</span></div>
       <h2>{name}</h2>
       <p>{age > 0 ? `Age ${age} · ` : ""}{profile.relationship}</p>
       <span className={"verify-chip" + (verified ? " ok" : "")}>{verified ? <><ShieldCheck size={12} /> Verified</> : <><Lock size={11} /> Verification pending</>}</span>
@@ -277,7 +297,15 @@ export function ClientProfilePanel({ name, age, profile, turns, verified, onVeri
       <p>Unlocks after Jordan completes the verification.</p>
       <button type="button" onClick={onVerify}>Confirm verification <Check size={13} /></button>
     </div> : <>
-      <div className="client-section"><small>ACCOUNTS</small>{profile.accounts.length ? profile.accounts.map(account => <div className="client-account" key={account.name}><strong>{account.name}</strong><span>{account.detail}</span></div>) : <p>No existing account on file.</p>}</div>
+      <div className="client-section"><small>CLIENT DETAILS</small><table className="profile-table"><tbody>
+        {[["Name", "K"], ["Client ID", profile.clientId ?? "Not on file"], ["Address", profile.address ?? "Not on file"], ["Book", profile.book ?? "Not assigned"], ["Segment", profile.segment ?? "Not classified"], ["Advisor", advisorChange ? `Training connection: ${advisorChange.summary}` : profile.advisor ?? "No advisor assigned"], ["Relationship", profile.relationship], ["Prior contacts", String(profile.priorContacts)], ["Last contact", profile.lastContact]].map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}
+      </tbody></table></div>
+      <div className="client-section"><small>ACCOUNTS HELD</small><table className="profile-table accounts-table"><thead><tr><th scope="col">Account</th><th scope="col">Details / status</th></tr></thead><tbody>
+        {profile.accounts.map(account => <tr key={account.name}><td>{account.name}</td><td>{account.detail}</td></tr>)}
+        {actions.filter(action => action.kind === "open_account").map(action => <tr key={action.id}><td>{action.accountName}</td><td>Added to training account</td></tr>)}
+        {!profile.accounts.length && !actions.some(action => action.kind === "open_account") && <tr><td colSpan={2}>No existing account on file.</td></tr>}
+      </tbody></table></div>
+      {actions.length > 0 && <div className="client-section"><small>COMPLETED CHANGES</small>{actions.map(action => <div className="client-account training-change" key={action.id}><strong>{action.offeringName}</strong><span>{action.summary}</span><small>Saved in this training workspace</small></div>)}</div>}
       <div className="client-section"><small>CURRENT SERVICE NEED</small><p>{profile.context}</p></div>
     </>}
     <div className="client-section"><small>LEARNED IN THIS CALL</small>{learned.length ? <div className="learned">{learned.map(fact => <span key={fact.label}><Sparkles size={10} />{fact.label}</span>)}</div> : <p>Goals and household details appear as the client shares them.</p>}</div>

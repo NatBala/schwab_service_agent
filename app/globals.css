@@ -524,3 +524,25 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .topbar .schwab-logo { width: 52px; height: 52px; }
   .topbar .status-chip { padding: 0 9px; font-size: 10px; }
 }
+.profile-table { width: 100%; border-collapse: collapse; font-size: 12px; line-height: 1.5; margin-top: 8px; }
+.profile-table th, .profile-table td { padding: 9px 6px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+.profile-table th { color: var(--muted); font-weight: 600; width: 32%; }
+.profile-table td { color: var(--ink-2); }
+.accounts-table thead th { background: #f0f6fa; color: #235672; }
+.offering-group-label { margin: 14px 0 9px; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #35637d; }
+.call-report-context { margin: 14px 0; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: #f6f9fc; font-size: 13px; }
+.call-report-context p { margin: 6px 0; line-height: 1.6; }
+.call-report-context small { color: var(--muted); }
+.offering-report-group { margin-bottom: 18px; }
+.offering-journey { margin-bottom: 12px; }
+.offering-timeline { border-left: 2px solid #c8e0ee; margin: 14px 0 0 5px; padding-left: 15px; display: flex; flex-direction: column; gap: 12px; }
+.offering-timeline > button, .offering-timeline > div { padding: 10px 12px; text-align: left; border: 1px solid #e1ebf1; border-radius: 10px; background: #f8fbfd; font-size: 13px; line-height: 1.6; }
+.offering-timeline small { display: block; color: #476f86; letter-spacing: .06em; font-size: 10px; font-weight: 650; margin-bottom: 5px; }
+.offering-timeline p { margin: 0; }
+.action-completed { background: #ecfdf5 !important; border: 1px solid #a7f3d0 !important; padding: 12px; border-radius: 10px; font-size: 13px; }
+.action-completed ol { margin: 8px 0 0; padding-left: 20px; }
+
+.client-account.training-change { display: flex; flex-direction: column; align-items: stretch; gap: 5px; }
+
+.report-service-quote { display: block; width: 100%; margin-top: 9px; padding: 10px; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 9px; }
+.report-service-quote small { display: block; margin-bottom: 5px; }

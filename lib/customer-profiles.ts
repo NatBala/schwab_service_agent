@@ -2,6 +2,11 @@
 export type CustomerProfile = {
   portrait: "female" | "male";
   relationship: string;
+  address: string;
+  book: string;
+  segment: string;
+  advisor: string;
+  clientId: string;
   accounts: Array<{ name: string; detail: string }>;
   priorContacts: number;
   lastContact: string;
@@ -9,9 +14,18 @@ export type CustomerProfile = {
   discoverable: Array<{ label: string; phrases: string[] }>;
 };
 
+const K_CLIENT_DETAILS = {
+  address: "100 Example Lane, Sample City, CA 90000",
+  book: "Client Services · K-001",
+  segment: "Retail investor",
+  advisor: "No advisor assigned",
+  clientId: "TRAINING-K-001",
+};
+
 export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-01": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Individual brokerage",
     accounts: [{ name: "Self-directed brokerage", detail: "$12,000 on file" }],
     priorContacts: 2,
@@ -24,7 +38,8 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-02": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Brokerage + retirement",
     accounts: [
       { name: "Taxable brokerage", detail: "Schwab account" },
@@ -41,7 +56,8 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-03": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Taxable investing",
     accounts: [{ name: "Taxable brokerage", detail: "$1.6 million on file" }],
     priorContacts: 3,
@@ -54,7 +70,8 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-04": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Rollover IRA opened",
     accounts: [{ name: "Schwab Rollover IRA", detail: "Open; rollover pending" }],
     priorContacts: 1,
@@ -67,7 +84,8 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-05": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Family account inquiry",
     accounts: [],
     priorContacts: 0,
@@ -80,7 +98,8 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-06": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Business owner inquiry",
     accounts: [],
     priorContacts: 1,
@@ -93,7 +112,8 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
     ],
   },
   "relationship-07": {
-    portrait: "female",
+    ...K_CLIENT_DETAILS,
+    portrait: "male",
     relationship: "Brokerage relationship",
     accounts: [{ name: "Schwab brokerage", detail: "Beneficiary update requested" }],
     priorContacts: 2,

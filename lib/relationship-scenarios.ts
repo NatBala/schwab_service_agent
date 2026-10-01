@@ -6,7 +6,7 @@ const briefs = [
   {
     "id": "relationship-01",
     "title": "Recurring ACH becomes retirement planning and automated investing",
-    "callerName": "Maya Patel",
+    "callerName": "K",
     "age": 36,
     "openingReason": "Transfer $800 every month",
     "customerOpener": "Hi, Jordan. I’m trying to set up an automatic transfer from my checking account into my Schwab brokerage account. I tried online, but I wasn’t sure I completed it correctly.",
@@ -51,7 +51,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "Thank you, Maya. I see the individual brokerage account ending in 2196 and the linked checking account. How much would you like transferred?"
+        "text": "Thank you, K. I see the individual brokerage account ending in 2196 and the linked checking account. How much would you like transferred?"
       },
       {
         "speaker": "customer",
@@ -230,7 +230,7 @@ const briefs = [
   {
     "id": "relationship-02",
     "title": "A balance inquiry becomes a comprehensive retirement and wealth conversation",
-    "callerName": "Allison Reed",
+    "callerName": "K",
     "age": 57,
     "openingReason": "Confirm current account value",
     "customerOpener": "I’m trying to confirm the total value of my Schwab accounts. The number looks lower than I remember seeing last week.",
@@ -395,7 +395,7 @@ const briefs = [
   {
     "id": "relationship-03",
     "title": "A cost-basis report reveals four distinct relationship paths",
-    "callerName": "Erica Wallace",
+    "callerName": "K",
     "age": 52,
     "openingReason": "Locate gains-and-losses report",
     "customerOpener": "I’m trying to find a report showing all of my unrealized gains and losses. I can see the cost basis for each position, but not one complete view.",
@@ -580,7 +580,7 @@ const briefs = [
   {
     "id": "relationship-04",
     "title": "A 401(k) rollover becomes a long-term retirement relationship",
-    "callerName": "Dana Reynolds",
+    "callerName": "K",
     "age": 49,
     "openingReason": "Obtain rollover instructions",
     "customerOpener": "I left my old employer and want to move the 401(k) to Schwab. I opened a Rollover IRA, but I don’t know what instructions to give the former plan.",
@@ -763,7 +763,7 @@ const briefs = [
   {
     "id": "relationship-05",
     "title": "A new-child account question becomes a multigenerational family relationship",
-    "callerName": "Priya Shah",
+    "callerName": "K",
     "age": null,
     "openingReason": "Determine which account to open",
     "customerOpener": "Our daughter was born last month, and both sets of grandparents want to contribute money for her future. We don’t know what kind of account to open.",
@@ -907,7 +907,7 @@ const briefs = [
   {
     "id": "relationship-06",
     "title": "A SEP-IRA request becomes a business and personal wealth relationship",
-    "callerName": "Olivia Grant",
+    "callerName": "K",
     "age": 44,
     "openingReason": "Open a SEP-IRA",
     "customerOpener": "I’m self-employed and want to open a SEP-IRA. I found an application, but I don’t know whether I have all the required documents.",
@@ -1076,23 +1076,23 @@ const briefs = [
   {
     "id": "relationship-07",
     "title": "A beneficiary update becomes trust, legacy, and family planning",
-    "callerName": "Patricia Lee",
+    "callerName": "K",
     "age": 67,
     "openingReason": "Update beneficiaries after an estate-plan revision",
     "customerOpener": "I need to update the beneficiaries on my brokerage account. My attorney revised my estate plan, and I want the account to match it.",
     "rolePlayHiddenFacts": [
       "Immediate service request: Update beneficiaries after an estate-plan revision",
-      "Broader concern, to reveal naturally after the service discussion: Her daughter is uncomfortable serving as successor trustee, and Patricia wants to create a charitable legacy"
+      "Broader concern, to reveal naturally after the service discussion: Her daughter is uncomfortable serving as successor trustee, and K wants to create a charitable legacy"
     ],
     "serviceResolution": "Address the original request: Update beneficiaries after an estate-plan revision. Use only actions confirmed in the live conversation.",
-    "postServiceBridge": "Her daughter is uncomfortable serving as successor trustee, and Patricia wants to create a charitable legacy",
+    "postServiceBridge": "Her daughter is uncomfortable serving as successor trustee, and K wants to create a charitable legacy",
     "discoveryBeats": [
       "After the beneficiary update, explain that your daughter is uncomfortable being successor trustee and you want to understand professional trust administration.",
       "Explain that you want your children involved in a continuing charitable legacy for several charities.",
       "Ask how the trust, charitable giving, and broader estate decisions can be coordinated with your attorney and a Schwab relationship contact."
     ],
     "opportunityCues": [
-      "Her daughter is uncomfortable serving as successor trustee, and Patricia wants to create a charitable legacy"
+      "Her daughter is uncomfortable serving as successor trustee, and K wants to create a charitable legacy"
     ],
     "guardrails": [
       "Do not claim an action, enrollment, or account change occurred unless the representative confirms it. Do not offer a product before the client voices a relevant need."
