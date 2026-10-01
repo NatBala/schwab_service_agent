@@ -281,6 +281,17 @@ test("K has a male portrait and complete fictional CRM fields in every scenario"
   for (const profile of Object.values(CUSTOMER_PROFILES)) {
     assert.equal(profile.portrait, "male");
     for (const field of [profile.address, profile.book, profile.segment, profile.advisor, profile.clientId]) assert.ok(field);
+    const book = Number(profile.book.replace(/[^0-9.]/g, ""));
+    assert.ok(book >= 250000 && book <= 650000);
+    assert.ok(["A", "B", "C"].includes(profile.segment));
+    assert.ok(profile.accounts.length > 0);
+    const accountTotal = profile.accounts.reduce((sum, account) => {
+      const balance = account.detail.match(/\$([\d,]+)/);
+      assert.ok(balance, `${account.name} must show a balance`);
+      return sum + Number(balance[1].replaceAll(",", ""));
+    }, 0);
+    assert.equal(accountTotal, book);
+    assert.doesNotMatch(profile.address, /example|sample|demo/i);
   }
   assert.ok(SCENARIOS.every(scenario => scenario.callerName === "K"));
 });
@@ -340,11 +351,28 @@ test("realtime session skips verification and provides the training completion t
     assert.ok(captured.session?.instructions?.includes("Skip verification questions"));
     assert.ok(captured.session?.instructions?.includes("The tool must return success before you claim completion"));
     assert.ok(captured.session?.instructions?.includes("Training account opened"));
+    assert.ok(captured.session?.instructions?.includes('"book":"$312,000"'));
+    assert.ok(captured.session?.instructions?.includes('"name":"Traditional IRA"'));
+    assert.ok(captured.session?.instructions?.includes("Do not substitute a referral or an appointment for an enrollment"));
+    assert.ok(captured.session?.instructions?.includes("Complete multiple accepted offerings separately"));
+    assert.ok(!captured.session?.instructions?.includes("offer to confirm it through an approved specialist"));
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
   }
+});
+
+test("authorized enrollments retain the selected account across saved profile reloads", () => {
+  const turns = [{id:"review", role:"representative", text:"Confirm enrollment in Schwab Intelligent Portfolios using your brokerage account?"}, {id:"consent", role:"customer", text:"Yes, please proceed."}];
+  const validated = validateTrainingAction({offeringId:"automated_investing",kind:"enroll",accountName:"Self-directed brokerage",summary:"Enrolled in Schwab Intelligent Portfolios",steps:["Reviewed investing goal and horizon", "Selected brokerage account and funding", "Reviewed choices and received consent"],consentText:turns[1].text}, turns);
+  let saved = "";
+  persistTrainingAction(validated, [], "enrollment-1", {setItem: (_key, value) => { saved = value; }});
+  const reloaded = JSON.parse(saved);
+  assert.equal(reloaded[0].kind, "enroll");
+  assert.equal(reloaded[0].accountName, "Self-directed brokerage");
+  assert.equal(reloaded[0].offeringName, "Schwab Intelligent Portfolios");
+  assert.equal(reloaded[0].consentTurnId, "consent");
 });
 
 test("training actions persist before success and repeated authorization is idempotent", () => {

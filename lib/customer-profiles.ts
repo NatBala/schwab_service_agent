@@ -1,10 +1,10 @@
-/** Synthetic CRM context for the seven training callers. Contact counts are demo data. */
+/** Synthetic CRM records. The address is a verified public location, not a client's residence. */
 export type CustomerProfile = {
   portrait: "female" | "male";
   relationship: string;
   address: string;
   book: string;
-  segment: string;
+  segment: "A" | "B" | "C";
   advisor: string;
   clientId: string;
   accounts: Array<{ name: string; detail: string }>;
@@ -15,19 +15,20 @@ export type CustomerProfile = {
 };
 
 const K_CLIENT_DETAILS = {
-  address: "100 Example Lane, Sample City, CA 90000",
-  book: "Client Services · K-001",
-  segment: "Retail investor",
+  // Public address source: https://www.sfgov.org/ccsfgsa/contact-us-5
+  address: "1 Dr. Carlton B. Goodlett Place, San Francisco, CA 94102",
   advisor: "No advisor assigned",
-  clientId: "TRAINING-K-001",
+  clientId: "K-001",
 };
 
 export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-01": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$312,000",
+    segment: "C",
     relationship: "Individual brokerage",
-    accounts: [{ name: "Self-directed brokerage", detail: "$12,000 on file" }],
+    accounts: [{ name: "Self-directed brokerage", detail: "$12,000 · Active" }, { name: "Traditional IRA", detail: "$300,000 · Active" }],
     priorContacts: 2,
     lastContact: "Bank-link support",
     context: "Recurring transfer setup is the current service need.",
@@ -40,10 +41,12 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-02": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$425,000",
+    segment: "B",
     relationship: "Brokerage + retirement",
     accounts: [
-      { name: "Taxable brokerage", detail: "Schwab account" },
-      { name: "Traditional IRA", detail: "$425,000 combined at Schwab" },
+      { name: "Taxable brokerage", detail: "$175,000 · Active" },
+      { name: "Traditional IRA", detail: "$250,000 · Active" },
     ],
     priorContacts: 4,
     lastContact: "Account statement question",
@@ -58,8 +61,10 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-03": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$625,000",
+    segment: "A",
     relationship: "Taxable investing",
-    accounts: [{ name: "Taxable brokerage", detail: "$1.6 million on file" }],
+    accounts: [{ name: "Taxable brokerage", detail: "$625,000 · Active" }],
     priorContacts: 3,
     lastContact: "Tax document request",
     context: "The customer is looking for a consolidated gains-and-losses report.",
@@ -72,8 +77,10 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-04": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$385,000",
+    segment: "B",
     relationship: "Rollover IRA opened",
-    accounts: [{ name: "Schwab Rollover IRA", detail: "Open; rollover pending" }],
+    accounts: [{ name: "Schwab brokerage", detail: "$385,000 · Active" }, { name: "Schwab Rollover IRA", detail: "$0 · Open; incoming rollover pending" }],
     priorContacts: 1,
     lastContact: "Rollover IRA opening",
     context: "The former-plan rollover process remains the first priority.",
@@ -86,8 +93,10 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-05": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$275,000",
+    segment: "C",
     relationship: "Family account inquiry",
-    accounts: [],
+    accounts: [{ name: "Schwab brokerage", detail: "$125,000 · Active" }, { name: "Roth IRA", detail: "$150,000 · Active" }],
     priorContacts: 0,
     lastContact: "No prior contact recorded",
     context: "The family is comparing account structures for a child.",
@@ -100,8 +109,10 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-06": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$650,000",
+    segment: "A",
     relationship: "Business owner inquiry",
-    accounts: [],
+    accounts: [{ name: "Schwab Organization Account", detail: "$250,000 · Active" }, { name: "Personal brokerage", detail: "$400,000 · Active" }],
     priorContacts: 1,
     lastContact: "Business retirement inquiry",
     context: "Plan choice requires review before an account is opened.",
@@ -114,8 +125,10 @@ export const CUSTOMER_PROFILES: Record<string, CustomerProfile> = {
   "relationship-07": {
     ...K_CLIENT_DETAILS,
     portrait: "male",
+    book: "$515,000",
+    segment: "B",
     relationship: "Brokerage relationship",
-    accounts: [{ name: "Schwab brokerage", detail: "Beneficiary update requested" }],
+    accounts: [{ name: "Schwab brokerage", detail: "$315,000 · Active; beneficiary update requested" }, { name: "Traditional IRA", detail: "$200,000 · Active" }],
     priorContacts: 2,
     lastContact: "Account maintenance",
     context: "The beneficiary change is the original service request.",

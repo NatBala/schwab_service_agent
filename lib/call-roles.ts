@@ -23,7 +23,7 @@ export const CLIENT_ROLE_BRIEFS: Record<string, ClientRoleBrief> = {
   },
   "relationship-03": {
     situation: "You need a complete unrealized gains-and-losses view for your taxable brokerage account.",
-    ifAsked: ["The taxable portfolio is about $1.6 million, including roughly $620,000 in appreciated employer stock.", "You worry about overlapping stock exposure and may need about $180,000 for a renovation and taxes.", "You make recurring charitable gifts and wonder how appreciated shares could fit."],
+    ifAsked: ["The taxable portfolio is about $625,000, including roughly $250,000 in appreciated employer stock.", "You worry about overlapping stock exposure and may need about $180,000 for a renovation and taxes.", "You make recurring charitable gifts and wonder how appreciated shares could fit."],
   },
   "relationship-04": {
     situation: "You opened a Schwab Rollover IRA and need the right instructions to move an old employer 401(k).",
@@ -46,24 +46,24 @@ export const CLIENT_ROLE_BRIEFS: Record<string, ClientRoleBrief> = {
 export const REPRESENTATIVE_SERVICE_RECORDS: Record<string, RepresentativeServiceRecord> = {
   "relationship-01": {
     knownRecord: ["K has a self-directed taxable brokerage account with approximately $12,000.", "A linked checking account is part of the scripted relationship. The status of any new recurring instruction is not known."],
-    serviceApproach: "Clarify the transfer amount, cadence, date, source, and destination. Explain how the client can review and submit the instruction securely. Do not claim it is scheduled without a confirmed action.",
-    discoveryBridge: "After the client understands the transfer setup, ask what the monthly deposit is helping their work toward.",
+    serviceApproach: "Clarify the transfer amount, cadence, date, source, and destination. Review the instruction with the client, ask for final authorization, and save it with complete_training_action before confirming it is scheduled.",
+    discoveryBridge: "After the client understands the transfer setup, ask what the monthly deposit is helping them work toward.",
     deskReferences: ["schwab_plan", "automated_investing", "fractional_shares"],
   },
   "relationship-02": {
     knownRecord: ["K has a taxable brokerage account and Traditional IRA with a combined practice value of about $425,000.", "The scripted difference from the prior week reflects market-price movement and a $2,000 withdrawal; no other unexplained transaction is in the practice record."],
     serviceApproach: "Explain the combined value and the known reasons for the change. Ask whether that addresses the balance question before exploring other goals.",
-    discoveryBridge: "After the balance question is answered, ask whether they is tracking a broader goal with these accounts.",
+    discoveryBridge: "After the balance question is answered, ask whether they are tracking a broader goal with these accounts.",
     deskReferences: ["schwab_plan", "financial_consultant", "wealth_advisory"],
   },
   "relationship-03": {
-    knownRecord: ["K has a taxable brokerage account with a practice value around $1.6 million.", "The Positions area contains unrealized gain-and-loss columns; available report or export controls depend on the account view."],
-    serviceApproach: "Help the client locate the complete unrealized gains-and-losses view. Confirm they found it before discussing what decision prompted their to look.",
+    knownRecord: ["K has a taxable brokerage account with a practice value around $625,000.", "The Positions area contains unrealized gain-and-loss columns; available report or export controls depend on the account view."],
+    serviceApproach: "Help the client locate the complete unrealized gains-and-losses view. Confirm they found it before discussing what decision prompted them to look.",
     discoveryBridge: "Ask what decision prompted the review of gains and losses.",
     deskReferences: ["personalized_indexing", "pledged_asset_line", "charitable_giving", "financial_consultant", "wealth_advisory"],
   },
   "relationship-04": {
-    knownRecord: ["K has an open Rollover IRA with no completed former-plan transfer in the practice record.", "The former employer 401(k) is approximately $185,000. Exact payee and delivery details require a rollover specialist or approved instructions."],
+    knownRecord: ["K has an open Rollover IRA with no completed former-plan transfer in the practice record.", "The former employer 401(k) is approximately $185,000. Collect the client's distribution preferences and record the authorized rollover setup; do not invent payee details or claim funds have arrived."],
     serviceApproach: "Clarify whether a distribution was requested and explain the direct-rollover process. Guide the training rollover setup and review the client’s choices before final consent. Do not imply the IRA rollover itself is a recommendation.",
     discoveryBridge: "After the rollover process is clear, ask what K wants these retirement assets to support.",
     deskReferences: ["schwab_plan", "automated_investing", "financial_consultant"],
@@ -82,7 +82,7 @@ export const REPRESENTATIVE_SERVICE_RECORDS: Record<string, RepresentativeServic
   },
   "relationship-07": {
     knownRecord: ["K has a Schwab brokerage account and wants the beneficiary designation to follow their attorney's revised written instructions.", "No beneficiary update has been submitted in this practice record."],
-    serviceApproach: "Help their review the approved update process and compare names and percentages with the attorney's instructions. Do not interpret legal documents or claim submission without a confirmed action.",
+    serviceApproach: "Help them review the approved update process and compare names and percentages with the attorney's instructions. Do not interpret legal documents or claim submission without a confirmed action.",
     discoveryBridge: "After the beneficiary process is clear, ask whether the update is part of a broader family or estate plan.",
     deskReferences: ["trust_services", "wealth_advisory", "charitable_giving", "financial_consultant"],
   },

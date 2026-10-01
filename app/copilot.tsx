@@ -194,7 +194,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     if (path) {
       path.evidenceIds = [...new Set([...path.evidenceIds, action.consentTurnId])];
       path.assessed = true;
-      if (!path.rationale || path.status === "possible") path.rationale = "The client authorized the training action: " + action.summary;
+      if (!path.rationale || path.status === "possible") path.rationale = "The client authorized the action: " + action.summary;
       path.status = "explore";
     }
   }
@@ -354,7 +354,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       const { action, actions } = persistTrainingAction(validated, trainingActionsRef.current, callId, localStorage);
       trainingActionsRef.current = actions;
       setTrainingActions(actions);
-      output = { success: true, simulation: true, action, availability: "Saved in this browser's training workspace and available on the next visit." };
+      output = { success: true, simulation: true, action, availability: "Saved in this profile and available on the next visit to this workspace." };
     } catch (error) {
       output = { success: false, simulation: true, error: error instanceof Error ? error.message : "Training action could not be completed." };
     }
@@ -1132,7 +1132,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           <div className="brand-title"><span className="brand-eyebrow">CLIENT SERVICES</span><h1>Service Assistant</h1></div>
         </div>
         <div className="topbar-right">
-          <span className="training-chip"><i /> Training simulation · synthetic clients</span>
+          <span className="training-chip"><i /> Simulation · Local account data</span>
           <span className={"status-chip " + status}><i />{statusLabel}</span>
         </div>
       </header>

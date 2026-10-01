@@ -19,7 +19,7 @@ export const TRAINING_ACTION_TOOL = {
     properties: {
       offeringId: { type: "string", description: "Catalog offering ID, or service_request for the original service request" },
       kind: { type: "string", enum: ["open_account", "update_account", "enroll", "schedule"] },
-      accountName: { type: "string", description: "New account name for open_account; otherwise empty" },
+      accountName: { type: "string", description: "New account name for open_account; selected existing account for enroll or update_account; empty only when no account applies" },
       summary: { type: "string", description: "Precise change authorized by the client" },
       steps: { type: "array", items: { type: "string" }, description: "Setup steps actually covered with the client" },
       consentText: { type: "string", description: "Exact most recent client words giving final consent; quote their completed transcript" },

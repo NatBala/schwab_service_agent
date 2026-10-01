@@ -402,8 +402,8 @@ const briefs = [
     "rolePlayHiddenFacts": [
       "Immediate service request: Locate gains-and-losses report",
       "Broader concern, to reveal naturally after the service discussion: Concentration management, liquidity for a renovation, and charitable giving",
-      "Taxable portfolio: $1.6 million",
-      "Employer stock: $620,000 with substantial unrealized gains"
+      "Taxable portfolio: $625,000",
+      "Employer stock: $250,000 with substantial unrealized gains"
     ],
     "serviceResolution": "Address the original request: Locate gains-and-losses report. Use only actions confirmed in the live conversation.",
     "postServiceBridge": "Concentration management, liquidity for a renovation, and charitable giving",
@@ -461,7 +461,7 @@ const briefs = [
       },
       {
         "speaker": "customer",
-        "text": "Most of the concern is my employer stock. It’s worth about $620,000 now, and the gain is very large. I also own index funds that include more of the same company and industry."
+        "text": "Most of the concern is my employer stock. It’s worth about $250,000 now, and the gain is very large. I also own index funds that include more of the same company and industry."
       },
       {
         "speaker": "representative",

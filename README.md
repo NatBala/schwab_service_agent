@@ -21,7 +21,7 @@ Verification is treated as complete off-channel and skipped during the call. The
 
 When a client accepts an offering, Jordan guides the relevant setup, reviews the proposed change, and requests final authorization. The `complete_training_action` tool validates the latest client consent and records the action before Jordan confirms completion. It supports account opening, account updates, enrollment, and scheduling in the training workspace. Interest, a decline, or an unconfirmed proposal cannot complete an action.
 
-Completed actions are saved in this browser's local storage under `schwab-training-actions-k-v1`. New training accounts appear in the accounts table; other changes appear in the completed-changes section. Advisor-related actions also appear in advisor status. These records survive reloads and future calls in the same browser. They do not execute real Schwab transactions or create real brokerage accounts. Clearing browser storage removes them.
+Completed actions are saved in this browser's local storage under `schwab-training-actions-k-v1`. New accounts appear in the accounts table; accepted enrollments appear with the selected account and completion status in Offering enrollments. Other changes appear in the completed-changes section. Advisor-related actions also appear in advisor status. These records survive reloads and future calls in the same browser. They do not execute real Schwab transactions or create real brokerage accounts. Clearing browser storage removes them.
 
 ## Live coaching and reports
 
@@ -44,3 +44,5 @@ npm run lint
 ```
 
 Tests cover evidence validation, discovery gates, stage progression, retained offerings, multi-offering journeys, confidence groups, final authorization, simulated-action persistence, and session tool registration. Session API tests mock the provider; they do not replace a live voice smoke test.
+
+Profile fixtures include populated account balances, Book totals of $250,000–$650,000, and A/B/C segments. The address is the publicly listed San Francisco City Hall address ([source](https://www.sfgov.org/ccsfgsa/contact-us-5)), used as fixture data rather than a private customer residence. Account snapshots are also supplied to the voice agent so its account context matches the visible profile.
