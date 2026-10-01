@@ -157,7 +157,8 @@ test("voice turns are coach-first: VAD commits audio but the app requests Jordan
   assert.equal(LIVE_TURN_DETECTION.create_response, false);
   assert.equal(LIVE_TURN_DETECTION.interrupt_response, true);
   assert.equal(LIVE_TURN_DETECTION.type, "server_vad");
-  assert.ok(LIVE_TURN_DETECTION.silence_duration_ms <= 400);
+  assert.ok(LIVE_TURN_DETECTION.silence_duration_ms >= 500 && LIVE_TURN_DETECTION.silence_duration_ms <= 800);
+  assert.ok(LIVE_TURN_DETECTION.threshold >= 0.6);
   assert.deepEqual(spokenReplyRequest(), {type:"response.create",response:{output_modalities:["audio"]}});
 });
 test("coaching waits for primary generation and representative transcript, including late ASR", () => {
@@ -251,4 +252,23 @@ test("the cue becomes a private system directive for Jordan's next reply", () =>
   assert.match(text, /Schwab Intelligent Portfolios/);
   const servicing = cueDirectiveItem({ ...cue, stage: "servicing" }, "cue_2").item.content[0].text;
   assert.doesNotMatch(servicing, /Intelligent Portfolios/, "no offering push while servicing");
+});
+
+ test("verification wording automatically unlocks accounts after explicit consent", () => {
+  const request = { role: "representative", text: "May I complete a quick verification?" };
+  assert.equal(demoVerificationComplete([request, { role: "customer", text: "Yes, please." }]), true);
+  assert.equal(demoVerificationComplete([request, { role: "customer", text: "No." }]), false);
+});
+
+import { advanceCallStage, retainOfferings } from "../lib/call-progress";
+test("verification progresses to service and late cues cannot regress discovery", () => {
+  assert.equal(advanceCallStage("verification", "servicing"), "servicing");
+  assert.equal(advanceCallStage("discovery", "servicing"), "discovery");
+  assert.equal(advanceCallStage("servicing", "recommendation"), "recommendation");
+});
+test("new offerings accumulate while existing offerings retain updated assessments", () => {
+  const old = [{id: "a", status: "explore"}, {id: "b", status: "emerging"}, {id: "c", status: "emerging"}];
+  const result = retainOfferings(old, [{id: "d", status: "explore"}], [{id: "a", status: "ruled_out"}]);
+  assert.deepEqual(result.map(card => card.id), ["a", "b", "c", "d"]);
+  assert.equal(result[0].status, "ruled_out");
 });

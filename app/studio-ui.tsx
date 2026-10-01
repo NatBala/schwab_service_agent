@@ -169,7 +169,7 @@ export function OpportunityBoard({ paths, analysis, turns, assessing, serviceDon
   return <section className="opportunities" aria-label="Relationship opportunities">
     <div className="section-heading">
       <div><small>DEEPEN THE RELATIONSHIP</small><h3>Schwab offerings in play</h3></div>
-      <span className={"assess-pill" + (assessing ? " on" : "")}><i />{assessing ? "AI assessing evidence" : `${paths.length} of 3 shown`}</span>
+      <span className={"assess-pill" + (assessing ? " on" : "")}><i />{assessing ? "AI assessing evidence" : `${paths.length} discovered`}</span>
     </div>
     {paths.length ? <div className="offer-grid">{paths.map((path, index) => {
       const quote = turns.findLast(turn => turn.role === "customer" && path.evidenceIds.includes(turn.id))?.text;
@@ -184,8 +184,7 @@ export function OpportunityBoard({ paths, analysis, turns, assessing, serviceDon
         <span className={"offer-status " + path.status}>{STATUS_LABEL[path.status] ?? path.status}</span>
         <p className="offer-why">{path.rationale}</p>
         {path.question && <div className="offer-ask"><small>ASK</small><span>{path.question}</span></div>}
-        <details className="offer-details">
-          <summary>Evidence &amp; next step <ChevronDown size={13} /></summary>
+        <div className="offer-details">
           {path.nextStep && <p><strong>Next step</strong> {path.nextStep}</p>}
           {quote && <q>{quote}</q>}
           <div className="offer-links">
@@ -193,7 +192,7 @@ export function OpportunityBoard({ paths, analysis, turns, assessing, serviceDon
             <a href={path.sourceUrl} target="_blank" rel="noreferrer">Product reference <ExternalLink size={12} /></a>
           </div>
           {path.id === "automated_investing" && analysis && <AutomatedCriteria criteria={analysis.criteria} onEvidence={onEvidence} />}
-        </details>
+        </div>
       </article>;
     })}</div> : <div className="offer-empty">
       <span><Target size={22} /></span>
@@ -260,8 +259,8 @@ export function CallTransition({ customerTurn, representativeTurn, milestones, s
 
 /* ───────────────────────── Client profile ───────────────────────── */
 
-export function ClientProfilePanel({ name, age, profile, brief, turns, verified, onVerify }: {
-  name: string; age: number; profile: CustomerProfile; brief: { situation: string; ifAsked: string[] } | null; turns: Turn[]; verified: boolean; onVerify: () => void;
+export function ClientProfilePanel({ name, age, profile, turns, verified, onVerify }: {
+  name: string; age: number; profile: CustomerProfile; turns: Turn[]; verified: boolean; onVerify: () => void;
 }) {
   const words = turns.filter(turn => turn.role === "customer").map(turn => turn.text.toLowerCase()).join(" ");
   const learned = profile.discoverable.filter(fact => fact.phrases.some(phrase => words.includes(phrase.toLowerCase())));
@@ -272,23 +271,17 @@ export function ClientProfilePanel({ name, age, profile, brief, turns, verified,
       <p>{age > 0 ? `Age ${age} · ` : ""}{profile.relationship}</p>
       <span className={"verify-chip" + (verified ? " ok" : "")}>{verified ? <><ShieldCheck size={12} /> Verified</> : <><Lock size={11} /> Verification pending</>}</span>
     </div>
-    {brief && <details className="client-brief" open>
-      <summary><UserRound size={13} /> Your role brief <ChevronDown size={13} /></summary>
-      <p>{brief.situation}</p>
-      <ul>{brief.ifAsked.map(item => <li key={item}>{item}</li>)}</ul>
-      <small>Share these only when Jordan asks.</small>
-    </details>}
     {!verified ? <div className="client-locked">
       <Lock size={18} />
       <strong>Account snapshot locked</strong>
-      <p>Unlocks after Jordan completes the quick demo verification.</p>
-      <button type="button" onClick={onVerify}>Confirm demo verification <Check size={13} /></button>
+      <p>Unlocks after Jordan completes the verification.</p>
+      <button type="button" onClick={onVerify}>Confirm verification <Check size={13} /></button>
     </div> : <>
       <div className="client-section"><small>ACCOUNTS</small>{profile.accounts.length ? profile.accounts.map(account => <div className="client-account" key={account.name}><strong>{account.name}</strong><span>{account.detail}</span></div>) : <p>No existing account on file.</p>}</div>
       <div className="client-section"><small>CURRENT SERVICE NEED</small><p>{profile.context}</p></div>
     </>}
     <div className="client-section"><small>LEARNED IN THIS CALL</small>{learned.length ? <div className="learned">{learned.map(fact => <span key={fact.label}><Sparkles size={10} />{fact.label}</span>)}</div> : <p>Goals and household details appear as the client shares them.</p>}</div>
-    {verified && <div className="client-section muted"><small>DEMO CONTACT HISTORY</small><p>{profile.priorContacts} simulated prior contacts · Last: {profile.lastContact}</p></div>}
+    {verified && <div className="client-section muted"><small>CONTACT HISTORY</small><p>{profile.priorContacts} simulated prior contacts · Last: {profile.lastContact}</p></div>}
     <div className="client-foot"><Headphones size={12} /> Synthetic training profile</div>
   </aside>;
 }

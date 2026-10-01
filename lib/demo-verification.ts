@@ -11,7 +11,7 @@ export function demoVerificationComplete(turns: VerificationTurn[]): boolean {
       if (/verif(?:y|ication)|authenticat/i.test(turn.text) && /\?|proceed|agree|permission/i.test(turn.text)) {
         requested = true;
         // An actual request, not a quoted promise about a future confirmation.
-        quickDemoRequested = /(?:may|can|could) (?:i|we) (?:complete|do|perform|run) (?:a |the )?(?:quick |brief )?demo verification\?/i.test(turn.text);
+        quickDemoRequested = /(?:may|can|could) (?:i|we) (?:complete|do|perform|run) (?:a |the )?(?:quick |brief )?(?:demo )?verification\?/i.test(turn.text);
       }
     } else if (requested && turn.role === "customer") {
       const declined = /\b(?:no|not|don't|do not|decline|won't)\b/i.test(turn.text);

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Relationship Copilot | Call Studio",
+  title: "Schwab | Call Studio",
   description: "Practice client conversations with a live AI customer and evidence-led call intelligence.",
   icons: {
     icon: "/favicon.svg",

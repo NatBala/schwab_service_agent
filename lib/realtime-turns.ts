@@ -2,9 +2,9 @@
  * LLM cue and asks Jordan to reply with that cue as a private directive. */
 export const LIVE_TURN_DETECTION = {
   type: "server_vad",
-  threshold: 0.5,
+  threshold: 0.65,
   prefix_padding_ms: 300,
-  silence_duration_ms: 400,
+  silence_duration_ms: 650,
   create_response: false,
   interrupt_response: true,
 } as const;

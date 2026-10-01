@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { advanceCallStage, retainOfferings } from "@/lib/call-progress";
 import { canRunBackgroundCoaching, spokenReplyRequest } from "@/lib/realtime-turns";
 import { demoVerificationComplete } from "@/lib/demo-verification";
 import { callPathSummary } from "@/lib/call-path-summary";
@@ -10,12 +12,10 @@ import { TAXONOMY } from "@/lib/taxonomy";
 import {
   AudioLines,
   CircleAlert,
-  Keyboard,
   Mic,
   MicOff,
   Phone,
   PhoneOff,
-  RefreshCw,
   Send,
   Sparkles,
   Zap,
@@ -48,19 +48,6 @@ type PendingCue = {
   /** Set when the API rejected an audio reference; the cue waits for the transcript instead. */
   awaitingTranscript: boolean;
 };
-
-function comparableTranscript(value: string) {
-  return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-}
-
-function isRepeatedOpening(earlier: Turn, later: Turn) {
-  if (earlier.role !== "customer" || later.role !== "customer") return false;
-  if (Math.abs(later.at - earlier.at) > 12) return false;
-  const first = comparableTranscript(earlier.text);
-  const second = comparableTranscript(later.text);
-  return first.length >= 18 && second.length >= first.length &&
-    (second === first || second.startsWith(first + " "));
-}
 
 function scrollToEvidence(ids: string[]) {
   const first = ids[0];
@@ -103,6 +90,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   // Stage and offering focus persist between cues so the view does not flicker while the next one streams.
   const [stage, setStage] = useState<CueStage | null>(null);
   const [focusOfferingId, setFocusOfferingId] = useState("");
+  const [retainedOfferings, setRetainedOfferings] = useState<OfferingCard[]>([]);
 
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RTCDataChannel | null>(null);
@@ -113,6 +101,9 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const primaryGenerationRef = useRef(false);
   const primaryResponseActiveRef = useRef(false);
   const replyQueuedRef = useRef(false);
+  const replyWatchdogRef = useRef<number | null>(null);
+  const spokenResponseIdRef = useRef("");
+  const [replyStalled, setReplyStalled] = useState(false);
   const activeCoachingIdRef = useRef("");
   const clientSpeakingRef = useRef(false);
   const coachingResponseIdsRef = useRef(new Set<string>());
@@ -155,12 +146,17 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     () => scenarios.find((item) => item.id === scenarioId),
     [scenarioId, scenarios],
   );
-  const draftList = Object.values(drafts);
+  const draftList = Object.values(drafts).filter(draft => !turns.some(turn => turn.id === draft.id));
+  const accountVerified = verificationConfirmed || demoVerificationComplete(turns);
+  const transcriptEntries = [
+    ...turns.map(turn => ({ ...turn, partial: false })),
+    ...draftList.map(draft => ({ ...draft, at: itemTimeRef.current.get(draft.id) ?? 0, partial: true })),
+  ].sort((first, second) => (itemOrderRef.current.get(first.id) ?? 0) - (itemOrderRef.current.get(second.id) ?? 0));
   const isInCall = status === "connecting" || status === "live";
   const waitingForRepresentative = awaitingCustomerReply && status === "live";
   const relationshipReady = analysis?.serviceStatus.state === "resolved" || cue?.serviceState === "resolved";
   const completedPaths = analysis ? callPathSummary(analysis.relationshipPaths, turns) : [];
-  const offeringCards = useMemo<OfferingCard[]>(() => {
+  const discoveredOfferings = useMemo<OfferingCard[]>(() => {
     const assessed: OfferingCard[] = analysis ? topRelationshipPaths(analysis.relationshipPaths) : [];
     const focusId = focusOfferingId;
     if (!focusId) return assessed;
@@ -170,9 +166,20 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     if (!catalog) return assessed;
     // The live coach chose this offering before the background assessment caught up.
     const focus: OfferingCard = { ...catalog, status: "emerging", signalConfidence: null, assessed: false, focus: true, question: "", rationale: "Selected by the live coach from the client's latest answer.", nextStep: "", evidenceIds: [] };
-    return [focus, ...assessed].slice(0, 3);
+    return [focus, ...assessed];
   }, [analysis, focusOfferingId]);
-  const displayStage = stage ?? (status === "live" ? "greeting" : null);
+  const offeringCards = retainOfferings(retainedOfferings, discoveredOfferings, analysis?.relationshipPaths ?? []);
+  useEffect(() => {
+    setRetainedOfferings(previous => retainOfferings(previous, discoveredOfferings, analysis?.relationshipPaths ?? []));
+  }, [discoveredOfferings, analysis]);
+  useEffect(() => {
+    if (accountVerified) setStage(current => advanceCallStage(current, "servicing"));
+    if (relationshipReady) setStage(current => advanceCallStage(current, "discovery"));
+    if (relationshipReady && (cue?.stage === "recommendation" || analysis?.relationshipPaths.some(path => path.status === "explore" && path.evidenceIds.length))) {
+      setStage(current => advanceCallStage(current, "recommendation"));
+    }
+  }, [accountVerified, relationshipReady, cue?.stage, analysis]);
+  const displayStage = status === "ended" ? "closing" : advanceCallStage(stage, accountVerified ? "servicing" : status === "live" ? "greeting" : null);
   const latestJordanTurn = turns.findLast((turn) => turn.role === "representative");
   const firstPathEvent = relationshipReady ? journeyEvents.find((event) => event.pathId !== "call-reason" && event.pathId !== "service" && event.pathId !== "service_recovery") : undefined;
   const pivotTurnIndex = firstPathEvent ? turns.findIndex((turn) => firstPathEvent.evidenceIds.includes(turn.id)) : -1;
@@ -194,7 +201,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   useEffect(() => {
     const feed = transcriptFeedRef.current;
     if (feed) feed.scrollTo({ top: feed.scrollHeight, behavior: "smooth" });
-  }, [turns.length, draftList.length]);
+  }, [turns, drafts]);
 
   useEffect(() => {
     return () => {
@@ -204,6 +211,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       if (openingMicTimerRef.current !== null) window.clearTimeout(openingMicTimerRef.current);
       if (speakerFallbackTimerRef.current !== null) window.clearTimeout(speakerFallbackTimerRef.current);
       if (reasonFlashTimerRef.current !== null) window.clearTimeout(reasonFlashTimerRef.current);
+      clearReplyWatchdog();
       channelRef.current?.close();
       peerRef.current?.close();
       streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -221,6 +229,9 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     if (openingMicTimerRef.current !== null) window.clearTimeout(openingMicTimerRef.current);
     openingMicTimerRef.current = null;
     setSpeaker(null);
+    clearReplyWatchdog();
+    setReplyStalled(false);
+    spokenResponseIdRef.current = "";
     setTurns([]);
     turnsRef.current = [];
     completeIdsRef.current.clear();
@@ -258,6 +269,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     setDirectedTurnIds([]);
     setStage(null);
     setFocusOfferingId("");
+    setRetainedOfferings([]);
   }
 
   function resetForScenario(id: string) {
@@ -271,6 +283,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   }
 
   function stopConnection(nextStatus: CallStatus = "ended") {
+    clearReplyWatchdog();
+    setReplyStalled(false);
     cancelAnalysis();
     clearCue();
     if (openingMicTimerRef.current !== null) window.clearTimeout(openingMicTimerRef.current);
@@ -292,7 +306,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     }
     setSpeaker(null);
     representativeResponseActiveRef.current = false;
-    setDrafts({});
     setCueStatus((current) => current === "thinking" || current === "streaming" || current === "directing" ? "idle" : current);
     setStatus(nextStatus);
   }
@@ -383,17 +396,51 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     }
     if (primaryResponseActiveRef.current) {
       replyQueuedRef.current = true;
+      watchReply();
       return;
     }
     sendPrimaryReply();
   }
 
+  function clearReplyWatchdog() {
+    if (replyWatchdogRef.current !== null) window.clearTimeout(replyWatchdogRef.current);
+    replyWatchdogRef.current = null;
+  }
+
+  function watchReply() {
+    clearReplyWatchdog();
+    replyWatchdogRef.current = window.setTimeout(() => {
+      replyWatchdogRef.current = null;
+      if (channelRef.current?.readyState !== "open") return;
+      if (spokenResponseIdRef.current && primaryResponseActiveRef.current) {
+        send({ type: "response.cancel", response_id: spokenResponseIdRef.current });
+      }
+      primaryGenerationRef.current = false;
+      primaryResponseActiveRef.current = false;
+      representativeResponseActiveRef.current = false;
+      replyQueuedRef.current = false;
+      setAwaitingCustomerReply(false);
+      setSpeaker(null);
+      releaseOpeningMic(0);
+      setReplyStalled(true);
+      setCallError("The representative's reply stalled. You can retry the reply or continue speaking.");
+    }, 15000);
+  }
+
   function sendPrimaryReply() {
     replyQueuedRef.current = false;
+    spokenResponseIdRef.current = "";
+    setReplyStalled(false);
+    setCallError("");
     primaryGenerationRef.current = true;
     primaryResponseActiveRef.current = true;
     if (replyTimingRef.current) replyTimingRef.current.requestMs = Math.round(performance.now() - replyTimingRef.current.started);
-    send(spokenReplyRequest());
+    if (send({ event_id: `spoken-${Date.now()}`, ...spokenReplyRequest() })) watchReply();
+    else {
+      primaryGenerationRef.current = false;
+      primaryResponseActiveRef.current = false;
+      setCallError("The voice connection is unavailable. Please start a new call.");
+    }
   }
 
   function noteCallReason(reason: CueReason | null) {
@@ -434,7 +481,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           return true;
         }
         setCue(finished);
-        if (finished.stage) setStage(finished.stage);
+        if (finished.stage) setStage(current => advanceCallStage(current, finished.stage));
         setFocusOfferingId(finished.offeringId);
         noteCallReason(finished.callReason);
         setCueLatencyMs(Math.round(performance.now() - pending.startedAt));
@@ -454,7 +501,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         const partial = readCue(text, turnsRef.current, pending.clientTurnId);
         if (partial) {
           noteCallReason(partial.callReason);
-          if (partial.stage) setStage(partial.stage);
+          if (partial.stage) setStage(current => advanceCallStage(current, partial.stage));
           if (!pending.replied) {
             setCue(partial);
             setCueStatus("streaming");
@@ -571,25 +618,10 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   function commitTurn(id: string, role: Turn["role"], transcript: string, activeScenarioId: string) {
     const text = transcript.trim();
     if (!text || completeIdsRef.current.has(id)) return;
-    // A standalone "I" is a common cut-off ASR pickup when the mic interrupts audio.
-    if (role === "customer" && comparableTranscript(text) === "i") {
-      setDrafts((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      return;
-    }
     completeIdsRef.current.add(id);
-    const order = itemOrder(id);
+    itemOrder(id);
     const turn: Turn = { id, role, text, at: itemTimeRef.current.get(id) ?? 0 };
-    const superseded = role === "customer" ? turnsRef.current.findLast((prior) =>
-      itemOrder(prior.id) < order && isRepeatedOpening(prior, turn) && !turnsRef.current.some((between) =>
-        between.role === "representative" && itemOrder(between.id) > itemOrder(prior.id) &&
-        itemOrder(between.id) < order,
-      ),
-    ) : undefined;
-    const nextTurns = [...turnsRef.current.filter((prior) => prior.id !== superseded?.id), turn].sort(
+    const nextTurns = [...turnsRef.current, turn].sort(
       (first, second) => itemOrder(first.id) - itemOrder(second.id),
     );
     turnsRef.current = nextTurns;
@@ -688,7 +720,12 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       return;
     }
     if (coachingResponseIdsRef.current.has(String(event.response_id ?? ""))) return;
+    if (type === "response.output_audio.delta" || type === "response.output_audio_transcript.delta") watchReply();
     if (type === "output_audio_buffer.started") {
+      void audioRef.current?.play().catch(() => {
+        setCallError("Audio playback paused. Retry the reply to resume audio.");
+        setReplyStalled(true);
+      });
       const timing = replyTimingRef.current;
       if (timing && timing.requestMs !== null && !timing.audioStarted) {
         timing.audioStarted = true;
@@ -696,7 +733,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       }
       return;
     }
-    if (type === "output_audio_buffer.stopped") {
+    if (type === "output_audio_buffer.stopped" || type === "output_audio_buffer.cleared") {
       if (speakerFallbackTimerRef.current !== null) window.clearTimeout(speakerFallbackTimerRef.current);
       speakerFallbackTimerRef.current = null;
       representativeResponseActiveRef.current = false;
@@ -730,6 +767,10 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       // Barge-in: the client is talking again, so any cue in progress is stale.
       cancelBackgroundCoaching();
       clearCue();
+      clearReplyWatchdog();
+      replyQueuedRef.current = false;
+      setReplyStalled(false);
+      setCallError("");
       clientSpeakingRef.current = true;
       setCueStatus((current) => current === "thinking" || current === "streaming" || current === "directing" ? "idle" : current);
       setSpeaker("customer");
@@ -754,6 +795,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         directNextResponseRef.current = false;
         setCueStatus("delivering");
       }
+      spokenResponseIdRef.current = String(response?.id ?? "");
+      watchReply();
       primaryGenerationRef.current = true;
       primaryResponseActiveRef.current = true;
       representativeResponseActiveRef.current = true;
@@ -762,6 +805,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       return;
     }
     if (type === "response.done") {
+      clearReplyWatchdog();
       if (speakerFallbackTimerRef.current !== null) window.clearTimeout(speakerFallbackTimerRef.current);
       speakerFallbackTimerRef.current = window.setTimeout(() => { representativeResponseActiveRef.current = false; setSpeaker(null); speakerFallbackTimerRef.current = null; }, 20000);
       const response = event.response as {
@@ -784,23 +828,16 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         ids.add(item.id);
         rememberCustomerItem(item.id, responseId);
         const pending = pendingCustomerItemsRef.current.get(item.id);
-        if (pending && !pending.parts.size) {
+        if (pending) {
           item.content?.forEach((part, index) => {
             if (typeof part.transcript === "string") pending.parts.set(index, part.transcript);
           });
         }
       }
       for (const id of ids) {
-        if (responseStatus === "completed") {
-          finishCustomerItem(id, activeScenarioId);
-        } else {
-          pendingCustomerItemsRef.current.delete(id);
-          setDrafts((current) => {
-            const next = { ...current };
-            delete next[id];
-            return next;
-          });
-        }
+        // Interrupted replies still contain words already shown to the client.
+        // Preserve their partial caption instead of deleting it.
+        if (responseStatus === "completed") finishCustomerItem(id, activeScenarioId);
       }
       responseItemIdsRef.current.delete(responseId);
       primaryGenerationRef.current = false;
@@ -837,6 +874,9 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         replyToClient(null);
         return;
       }
+      clearReplyWatchdog();
+      releaseOpeningMic(0);
+      setReplyStalled(true);
       setCallError(info?.message ?? "The live session reported an error.");
       primaryGenerationRef.current = false;
       primaryResponseActiveRef.current = false;
@@ -856,6 +896,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     }
     if (isRepresentative) rememberCustomerItem(id, String(event.response_id ?? ""));
     if (type.endsWith(".delta")) {
+      itemOrder(id);
       if (completeIdsRef.current.has(id)) return;
       const delta = String(event.delta ?? "");
       if (!delta) return;
@@ -880,11 +921,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           if (!responseStatus || responseStatus === "completed") finishCustomerItem(id, activeScenarioId);
           if (responseStatus && responseStatus !== "completed") {
             pendingCustomerItemsRef.current.delete(id);
-            setDrafts((current) => {
-              const next = { ...current };
-              delete next[id];
-              return next;
-            });
+            // Keep the interrupted caption visible as an unfinished turn.
           }
         } else {
           commitTurn(id, role, transcript, activeScenarioId);
@@ -899,11 +936,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     const picked = choices[Math.floor(Math.random() * choices.length)] ?? scenarios[0];
     lastScenarioIdRef.current = picked.id;
     resetForScenario(picked.id);
+    void startCall(picked.id);
   }
 
-  async function startCall(textOnly = false) {
-    if (!selected || isInCall) return;
-    const activeScenarioId = selected.id;
+  async function startCall(activeScenarioId: string) {
+    if (isInCall) return;
     resetCallState();
     setStatus("connecting");
 
@@ -933,10 +970,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         }
       };
 
-      if (textOnly) {
-        peer.addTransceiver("audio", { direction: "recvonly" });
-        setMicAvailable(false);
-      } else {
+      {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
@@ -968,8 +1002,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       channel.onopen = () => {
         startedAtRef.current = Date.now();
         setStatus("live");
-        primaryResponseActiveRef.current = true;
-        channel.send(JSON.stringify({ type: "response.create", response: { output_modalities: ["audio"] } }));
+        sendPrimaryReply();
       };
 
       const offer = await peer.createOffer();
@@ -1027,8 +1060,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true"><Zap size={18} /></span>
-          <div><strong>Relationship Copilot</strong><small>AI coach for Schwab service calls</small></div>
+          <Image className="schwab-logo" src="/schwab-logo.svg" width={64} height={64} alt="Charles Schwab" priority unoptimized />
+          <div className="brand-title"><span className="brand-eyebrow">CLIENT SERVICES</span><h1>Service Assistant</h1></div>
         </div>
         <div className="topbar-right">
           <span className="training-chip"><i /> Training simulation · synthetic clients</span>
@@ -1038,11 +1071,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
       <section className={"callbar " + status}>
         <div className="callbar-person">
-          <span className="callbar-avatar" aria-hidden="true">{selected ? selected.callerName.split(" ").map(part => part[0]).join("").slice(0, 2) : <AudioLines size={20} />}</span>
+          <span className="callbar-avatar" aria-hidden="true">{<AudioLines size={20} />}</span>
           <div>
-            <small>{selected ? "YOU ARE PLAYING" : "PRACTICE CALL"}</small>
-            <strong>{selected?.callerName ?? "Pick a client role"}</strong>
-            <span>{selected ? `Jordan, the AI representative, answers · ${selected.openingReason}` : "A random synthetic client is chosen for each call"}</span>
+            <small>{"SERVICE CALL"}</small>
+            <strong>{isInCall ? "Incoming call" : "Ready for a call"}</strong>
+            <span>{"The representative introduces themself, then listens."}</span>
           </div>
         </div>
         <CallWaveform speaker={speaker} waiting={waitingForRepresentative} />
@@ -1051,46 +1084,37 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           {status === "live" && <button type="button" className="icon-btn" onClick={toggleMute} disabled={!micAvailable || openingMic} aria-label={muted ? "Unmute" : "Mute"} title={openingMic ? "Microphone opens after Jordan's greeting" : muted ? "Unmute" : "Mute"}>{muted ? <MicOff size={17} /> : <Mic size={17} />}</button>}
           {status === "live" || status === "connecting" ? (
             <button className="btn-end" type="button" onClick={() => stopConnection("ended")}><PhoneOff size={16} /> End call</button>
-          ) : status === "ready" ? <>
-            <button className="btn-ghost" type="button" onClick={() => void startCall(true)}><Keyboard size={15} /> Text call</button>
-            <button className="btn-call" type="button" onClick={() => void startCall()}><Phone size={16} /> Call Jordan</button>
-          </> : (
-            <button className="btn-call" type="button" onClick={prepareCall}><RefreshCw size={15} /> {status === "ended" || status === "error" ? "New client role" : "Choose a client role"}</button>
+          ) : (
+            <button className="btn-call" type="button" onClick={prepareCall}><Phone size={16} /> Pick the call</button>
           )}
-          {status === "ready" && <button className="btn-ghost subtle" type="button" onClick={prepareCall} aria-label="Pick a different client role"><RefreshCw size={14} /></button>}
         </div>
       </section>
 
       <StageTrack stage={displayStage} />
 
-      {callError && <div className="call-error" role="alert"><CircleAlert size={17} />{callError}</div>}
+      {callError && <div className="call-error" role="alert"><CircleAlert size={17} />{callError}{replyStalled && status === "live" && <button type="button" onClick={() => { cancelBackgroundCoaching(); clearCue(); void audioRef.current?.play().catch(() => {}); if (!primaryResponseActiveRef.current) sendPrimaryReply(); }}>Retry reply</button>}</div>}
 
-      <main className={"workspace" + (selected?.profile ? " with-client" : "")}>
+      <main className={"workspace" + " with-client"}>
         <section className="panel chat" aria-label="Conversation">
           <div className="panel-head"><strong>Live conversation</strong><span className={"live-dot" + (status === "live" ? " on" : "")}><i />{status === "live" ? "Captions live" : "Ready"}</span></div>
           {analysis?.tags.length ? <div className="tag-row">{analysis.tags.map((tag) => <button type="button" key={tag.id} className={"tag kind-" + tag.kind} onClick={() => jumpToEvidence(tag.evidenceIds)}>{tag.label}</button>)}</div> : null}
+          {accountVerified && <div className="verification-confirmation" role="status">Verification complete · Account details unlocked</div>}
           <div className="chat-feed" ref={transcriptFeedRef}>
             {turns.length === 0 && draftList.length === 0 ? (
               <div className="chat-empty">
                 <span><AudioLines size={26} /></span>
-                <h3>{status === "ready" ? "Your role is ready" : "Start a practice call"}</h3>
-                <p>{status === "ready" ? "Call Jordan, explain why you are calling, then answer naturally. Watch the AI coach steer every reply." : "Choose a client role. Every insight is grounded in what you and Jordan actually say."}</p>
+                <h3>{"Pick the call"}</h3>
+                <p>{"Jordan will introduce themself, then listen to you."}</p>
               </div>
             ) : (
               <>
-                {turns.map((turn) => (
-                  <article id={"turn-" + turn.id} key={turn.id} className={"bubble role-" + turn.role}>
+                {transcriptEntries.map((turn) => (
+                  <article id={"turn-" + turn.id} key={turn.id} className={"bubble role-" + turn.role + (turn.partial ? " draft" : "")}>
                     <span className="bubble-avatar">{turn.role === "customer" ? "You" : "JR"}</span>
                     <div>
-                      <header><strong>{turn.role === "customer" ? selected?.callerName ?? "Client" : "Jordan"}</strong><time>{timeLabel(turn.at)}</time>{directedTurnIds.includes(turn.id) && <span className="directed"><Zap size={10} /> coach-directed</span>}</header>
-                      <p>{turn.text}</p>
+                      <header><strong>{turn.role === "customer" ? "You" : "Jordan"}</strong><time>{turn.partial ? status === "ended" || status === "error" ? "Partial transcript" : "Transcribing" : timeLabel(turn.at)}</time>{directedTurnIds.includes(turn.id) && <span className="directed"><Zap size={10} /> coach-directed</span>}</header>
+                      <p>{turn.text}{turn.partial && status === "live" && <span className="caret" />}</p>
                     </div>
-                  </article>
-                ))}
-                {draftList.map((draft) => (
-                  <article key={draft.id} className={"bubble role-" + draft.role + " draft"}>
-                    <span className="bubble-avatar">{draft.role === "customer" ? "You" : "JR"}</span>
-                    <div><header><strong>{draft.role === "customer" ? "You" : "Jordan"}</strong><time>live</time></header><p>{draft.text}<span className="caret" /></p></div>
                   </article>
                 ))}
               </>
@@ -1114,7 +1138,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           {analysisError && <div className="soft-error" role="status"><CircleAlert size={15} />{analysisError}</div>}
         </section>
 
-        {selected?.profile && <ClientProfilePanel name={selected.callerName} age={selected.age} profile={selected.profile} brief={selected.clientBrief} turns={turns} verified={verificationConfirmed || demoVerificationComplete(turns)} onVerify={() => setVerificationConfirmed(true)} />}
+        {selected?.profile && <ClientProfilePanel name={selected.callerName} age={selected.age} profile={selected.profile} turns={turns} verified={accountVerified} onVerify={() => setVerificationConfirmed(true)} />}
+        {!selected?.profile && <aside className="client-panel" aria-label="Client profile"><div className="client-section"><small>CLIENT PROFILE</small><h2>Waiting for a caller</h2><p>The client profile appears when you pick the call. Accounts unlock after verification.</p></div></aside>}
       </main>
     </div>
   );
