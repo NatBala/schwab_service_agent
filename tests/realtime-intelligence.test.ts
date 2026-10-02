@@ -273,10 +273,11 @@ test("new offerings accumulate while existing offerings retain updated assessmen
   assert.equal(result[0].status, "ruled_out");
 });
 
-import { validateTrainingAction, persistTrainingAction } from "../lib/training-actions";
+import { TRAINING_ACTION_TOOL, validateTrainingAction, persistTrainingAction } from "../lib/training-actions";
 import { buildOfferingJourneys, groupOfferings } from "../lib/offering-journey";
 import { CUSTOMER_PROFILES } from "../lib/customer-profiles";
 import { SCENARIOS } from "../lib/relationship-scenarios";
+import { OFFERING_CONVERSATION_OBJECTIVE } from "../lib/offering-conversation";
 test("K has a male portrait and complete fictional CRM fields in every scenario", () => {
   for (const profile of Object.values(CUSTOMER_PROFILES)) {
     assert.equal(profile.portrait, "male");
@@ -303,6 +304,14 @@ test("training completion requires latest explicit authorization after final rev
   assert.throws(() => validateTrainingAction(input, [...consent, {id: "later", role: "customer", text: "Wait, cancel that."}]));
   assert.throws(() => validateTrainingAction(input, [{id: "interest", role: "representative", text: "Are you interested in opening an account?"}, consent[1]]));
   assert.throws(() => validateTrainingAction({...input, offeringId: "invented"}, consent));
+});
+test("completion tool exposes exact catalog IDs and accepts a natural authorization review", () => {
+  assert.deepEqual(TRAINING_ACTION_TOOL.parameters.properties.offeringId.enum, [...RELATIONSHIP_PATHS.map(path => path.id), "service_request"]);
+  const consent = "I authorize you to complete the setup.";
+  const input = {offeringId:"automated_investing",kind:"enroll",accountName:"Schwab brokerage",summary:"Enrollment setup completed",steps:["Reviewed goal, funding and account"],consentText:consent};
+  const transcript = [{id:"review",role:"representative",text:"Your automated retirement setup uses the selected brokerage. Do I have your authorization to submit it?"},{id:"consent",role:"customer",text:consent}];
+  assert.equal(validateTrainingAction(input, transcript).consentTurnId, "consent");
+  assert.throws(() => validateTrainingAction({...input,consentText:"I'm interested."}, [...transcript.slice(0,1),{id:"interest",role:"customer",text:"I'm interested."}]));
 });
 test("journey shows every offering's client trigger, transition and introduction", () => {
   const transcript = [
@@ -355,12 +364,33 @@ test("realtime session skips verification and provides the training completion t
     assert.ok(captured.session?.instructions?.includes('"name":"Traditional IRA"'));
     assert.ok(captured.session?.instructions?.includes("Do not substitute a referral or an appointment for an enrollment"));
     assert.ok(captured.session?.instructions?.includes("Complete multiple accepted offerings separately"));
+    assert.ok(captured.session?.instructions?.includes(OFFERING_CONVERSATION_OBJECTIVE));
     assert.ok(!captured.session?.instructions?.includes("offer to confirm it through an approved specialist"));
   } finally {
     globalThis.fetch = originalFetch;
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
   }
+});
+
+test("both private coaches keep the offering objective and receive saved execution context", () => {
+  const action = {id:"saved", offeringId:"automated_investing", offeringName:"Schwab Intelligent Portfolios", kind:"enroll" as const, accountName:"Schwab brokerage", summary:"Enrollment setup completed", steps:["Reviewed preferences", "Obtained consent"], consentTurnId:"consent", completedAt:"2026-10-01T12:00:00Z"};
+  const cue = cueRequest({version:8, turns, completedActions:[action]});
+  const background = coachingRequest(turns, 8, [action]);
+  for (const request of [cue, background]) {
+    assert.ok(request.response.instructions.includes(OFFERING_CONVERSATION_OBJECTIVE));
+    const message = request.response.input[0] as { content: Array<{ text: string }> };
+    const data = JSON.parse(message.content[0].text);
+    assert.equal(data.completedActions[0].offeringId, action.offeringId);
+    assert.equal(data.completedActions[0].accountName, action.accountName);
+    assert.equal(data.completedActions[0].consentTurnId, action.consentTurnId);
+    assert.ok(data.offerings.every((offering: {description?: string}) => offering.description));
+    assert.deepEqual(data.turns.map(({id,role,text}: {id:string;role:string;text:string}) => ({id,role,text})), turns.map(({id,role,text}) => ({id,role,text})));
+  }
+  const directive = cueDirectiveItem(readCue(JSON.stringify({...fullCue,stage:"recommendation",offeringId:"automated_investing"}), cueTurns, "", true)!, "cue_execution").item.content[0].text;
+  assert.ok(directive.includes("Schwab Intelligent Portfolios"));
+  assert.ok(directive.includes("do not restart discovery because of this cue"));
+  assert.ok(directive.includes("After tool success, confirm that saved result"));
 });
 
 test("authorized enrollments retain the selected account across saved profile reloads", () => {

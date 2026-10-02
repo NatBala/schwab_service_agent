@@ -17,7 +17,7 @@ export const TRAINING_ACTION_TOOL = {
   parameters: {
     type: "object",
     properties: {
-      offeringId: { type: "string", description: "Catalog offering ID, or service_request for the original service request" },
+      offeringId: { type: "string", enum: [...RELATIONSHIP_PATHS.map(path => path.id), "service_request"], description: "Exact catalog offering ID, or service_request for the original service request" },
       kind: { type: "string", enum: ["open_account", "update_account", "enroll", "schedule"] },
       accountName: { type: "string", description: "New account name for open_account; selected existing account for enroll or update_account; empty only when no account applies" },
       summary: { type: "string", description: "Precise change authorized by the client" },
@@ -39,8 +39,8 @@ export function validateTrainingAction(input: unknown, turns: Array<{ id: string
   const proposal = turns.slice(0, clientIndex).findLast(turn => turn.role === "representative");
   const normalize = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
   if (!client || typeof value.consentText !== "string" || normalize(client.text) !== normalize(value.consentText)) throw new Error("Wait for the latest client transcript and quote its final authorization exactly.");
-  if (/\b(no|not|don't|do not|decline|cancel|wait|maybe)\b/i.test(client.text) || !/\b(yes|agree|proceed|go ahead|confirm|please do|let's do|accept|do it)\b/i.test(client.text)) throw new Error("Final explicit client authorization is required.");
-  if (!proposal || !/\b(confirm|proceed|authorize|go ahead|permission)\b/i.test(proposal.text)) throw new Error("Review the proposed action with the client and ask for final confirmation first.");
+  if (/\b(no|not|don't|do not|decline|cancel|wait|maybe)\b/i.test(client.text) || !/\b(yes|agree|proceed|go ahead|confirm|please do|let's do|accept|do it|authoriz(?:e|ed)|authoris(?:e|ed)|you have my permission)\b/i.test(client.text)) throw new Error("Final explicit client authorization is required.");
+  if (!proposal || !/\b(confirm(?:ation)?|proceed|authoriz(?:e|ation)|authoris(?:e|ation)|go ahead|permission)\b/i.test(proposal.text)) throw new Error("Review the proposed action with the client and ask for final confirmation first.");
   if (typeof value.summary !== "string" || !value.summary.trim() || value.summary.length > 500) throw new Error("A concise action summary is required.");
   if (!Array.isArray(value.steps) || !value.steps.length || value.steps.length > 12 || value.steps.some(step => typeof step !== "string" || !step.trim() || step.length > 300)) throw new Error("List the setup steps covered in the call.");
   if (typeof value.accountName !== "string" || value.accountName.length > 120 || value.kind === "open_account" && !value.accountName.trim()) throw new Error("Provide a name for the new account.");

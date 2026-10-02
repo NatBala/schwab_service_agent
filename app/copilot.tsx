@@ -358,6 +358,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     } catch (error) {
       output = { success: false, simulation: true, error: error instanceof Error ? error.message : "Training action could not be completed." };
     }
+    // The next reply must address the tool result, not repeat an earlier setup cue.
+    if (directiveItemIdRef.current) {
+      send({ type: "conversation.item.delete", item_id: directiveItemIdRef.current });
+      directiveItemIdRef.current = "";
+    }
     send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) } });
     replyQueuedRef.current = true;
   }
@@ -420,6 +425,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       pendingAudioItemId: audio ? pending.clientTurnId : undefined,
       context: cueContextRef.current,
       assessment: assessmentSummary(),
+      completedActions: trainingActionsRef.current,
     });
     if (!send(request)) replyToClient(null);
   }
@@ -619,7 +625,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     coachingInFlightRef.current = true;
     setAnalyzing(true);
     setAnalysisError("");
-    channel.send(JSON.stringify(coachingRequest(pending.turns, analysisVersionRef.current)));
+    channel.send(JSON.stringify(coachingRequest(pending.turns, analysisVersionRef.current, trainingActionsRef.current)));
     coachingTimeoutRef.current = window.setTimeout(() => {
       coachingInFlightRef.current = false;
       setAnalyzing(false);
