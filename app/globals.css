@@ -548,3 +548,72 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .report-service-quote small { display: block; margin-bottom: 5px; }
 
 .accounts-table td small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+
+/* ───────────────────────── Pre-call cross-sell plan ───────────────────────── */
+.xsell {
+  position: relative; padding: 18px; border-radius: 20px; border: 1.5px solid transparent;
+  background: linear-gradient(#fff, #fffdf7) padding-box, linear-gradient(130deg, #fbbf24, #f97316 45%, var(--violet)) border-box;
+  box-shadow: 0 16px 36px -18px rgb(245 158 11 / .55), var(--shadow);
+}
+.xsell .section-heading small { color: #c2410c; }
+.xsell-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #7c2d12; background: linear-gradient(135deg, #fef3c7, #fde68a); }
+.xsell-summary { margin: -4px 0 12px; font-size: 13px; line-height: 1.55; color: var(--ink-2); }
+.xsell-signals { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.xsell-signals span { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; color: #1e3a8a; background: #eff6ff; border: 1px solid #dbeafe; cursor: help; animation: popIn .35s ease both; }
+.xsell-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.xsell-card { position: relative; display: flex; flex-direction: column; gap: 9px; padding: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--line); transition: transform .2s ease, box-shadow .2s ease, opacity .3s; animation: rise .45s ease both; }
+.xsell-card:nth-child(2) { animation-delay: 70ms; }
+.xsell-card:nth-child(3) { animation-delay: 140ms; }
+.xsell-card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.xsell-card.next { border-color: #f59e0b; box-shadow: 0 0 0 3px rgb(245 158 11 / .18), 0 14px 30px -16px rgb(245 158 11 / .8); }
+.xsell-card.status-accepted { border-color: #6ee7b7; background: linear-gradient(180deg, #fff, #f0fdf4); }
+.xsell-card.status-declined { opacity: .6; }
+.xsell-top { display: flex; align-items: center; gap: 9px; }
+.xsell-top .offering-icon { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(135deg, #f59e0b, #ea580c); box-shadow: 0 6px 14px -6px rgb(234 88 12 / .7); }
+.xsell-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.xsell-rank { font-size: 10.5px; letter-spacing: .1em; font-weight: 800; color: #c2410c; }
+.xsell-status { flex: none; padding: 3px 9px; border-radius: 999px; font-size: 10.5px; font-weight: 700; color: var(--muted); background: var(--line-2); white-space: nowrap; }
+.xsell-card.next .xsell-status { color: #7c2d12; background: #fde68a; animation: blink 1.6s ease-in-out infinite; }
+.xsell-status.raised { color: #1d4ed8; background: #eff6ff; }
+.xsell-status.interested { color: #6d28d9; background: #f3e8ff; }
+.xsell-status.accepted { color: var(--teal-ink); background: #d1fae5; }
+.xsell-status.declined { color: #9f1239; background: #fff1f2; }
+.xsell-headline { font-size: 14px; line-height: 1.35; letter-spacing: -.01em; }
+.xsell-why { display: flex; gap: 6px; margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+.xsell-why svg { flex: none; margin-top: 3px; color: #d97706; }
+.xsell-facts { display: flex; flex-direction: column; gap: 4px; }
+.xsell-facts span { padding: 6px 9px; border-left: 3px solid #3b82f6; border-radius: 0 8px 8px 0; font-size: 12px; line-height: 1.45; color: #1e3a8a; background: #f8fbff; }
+.xsell-opener { margin: 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.5; font-style: italic; color: #e8f1fb; background: linear-gradient(135deg, #0a1f38, #1d2c6b); }
+.xsell-opener small { display: block; margin-bottom: 4px; font-style: normal; font-size: 9.5px; letter-spacing: .12em; font-weight: 800; color: #7dd3fc; }
+.xsell-pivots { margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--card-soft); border: 1px solid var(--line); font-size: 12.5px; }
+.xsell-pivots summary { list-style: none; display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 700; color: var(--ink-2); }
+.xsell-pivots summary::-webkit-details-marker { display: none; }
+.xsell-pivots summary svg:last-child { margin-left: auto; }
+.xsell-pivots[open] summary svg:last-child { transform: rotate(180deg); }
+.xsell-pivots ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.xsell-pivots li { display: flex; gap: 9px; align-items: flex-start; }
+.xsell-pivots li .offering-icon { width: 26px; height: 26px; border-radius: 8px; }
+.xsell-pivots li p { margin: 2px 0 0; color: var(--muted); line-height: 1.45; }
+.xsell.compact .xsell-summary { margin-bottom: 10px; }
+.xsell.loading { background: linear-gradient(#fff, #fffdf7) padding-box, linear-gradient(130deg, #fde68a, #fdba74, #c4b5fd) border-box; }
+.xsell-skeleton { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.xsell-skeleton i { height: 120px; border-radius: 16px; background: linear-gradient(100deg, #f1f5f9 30%, #fef3c7 50%, #f1f5f9 70%); background-size: 250% 100%; animation: sweep 1.4s linear infinite; }
+.xsell.failed { display: flex; align-items: center; gap: 12px; border: 1px solid #fde68a; background: #fffbeb; box-shadow: none; color: var(--amber-ink); }
+.xsell.failed strong { display: block; font-size: 13.5px; color: var(--ink); }
+.xsell.failed p { margin: 2px 0 0; font-size: 12.5px; }
+.xsell.failed button { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #fcd34d; background: #fff; color: #92400e; font-weight: 650; font-size: 12.5px; }
+
+/* Enriched client record */
+.accounts-table tr.enriched td { background: #fffbeb; }
+.accounts-table td em { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; font-style: normal; font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; }
+.accounts-table td b { display: block; color: var(--ink); }
+.accounts-table td small { display: block; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.signal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.signal-list li { display: flex; gap: 7px; padding: 8px 9px; border-radius: 10px; background: #f8fbff; border: 1px solid #dbeafe; font-size: 11.5px; line-height: 1.45; color: var(--ink-2); }
+.signal-list svg { flex: none; margin-top: 2px; color: #2563eb; }
+.signal-list strong { display: block; font-size: 12px; color: #1e3a8a; }
+@media (max-width: 980px) {
+  .xsell-skeleton { grid-template-columns: 1fr; }
+  .xsell-skeleton i:nth-child(n+2) { display: none; }
+  .xsell.failed { flex-wrap: wrap; }
+}

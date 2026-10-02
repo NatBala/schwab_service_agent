@@ -4,6 +4,12 @@ import Image from "next/image";
 import {
   ArrowRight,
   BadgeCheck,
+  ChevronDown,
+  CircleAlert,
+  Database,
+  Lightbulb,
+  RefreshCw,
+  Shuffle,
   Check,
   Compass,
   ExternalLink,
@@ -22,6 +28,7 @@ import {
 import { buildOfferingJourneys, groupOfferings } from "@/lib/offering-journey";
 import type { TrainingAction } from "@/lib/training-actions";
 import type { CustomerProfile } from "@/lib/customer-profiles";
+import { formatMoney, type CrossSellPlan, type PlanStatus } from "@/lib/cross-sell";
 import type { CueReason, CueStage, LiveCue } from "@/lib/live-cue";
 import { ConfidenceRing, OfferingIcon } from "./offering-visuals";
 import type { Analysis, CueStatus, JourneyEvent, Turn } from "./studio-types";
@@ -142,6 +149,78 @@ export function CueHero({ cue, status, latencyMs, jordanLine, offeringName, live
       {jordanLine && <p className="cue-said"><span>Jordan said</span> “{jordanLine}”</p>}
       {cue?.evidenceIds.length ? <button type="button" className="cue-evidence" onClick={() => onEvidence(cue.evidenceIds)}>Evidence <ArrowRight size={12} /></button> : null}
     </footer>
+  </section>;
+}
+
+
+/* ───────────────────────── Pre-call cross-sell plan ───────────────────────── */
+
+const PLAN_STATUS: Record<PlanStatus, string> = {
+  planned: "Planned",
+  raised: "Raised by Jordan",
+  interested: "Client interested",
+  accepted: "Accepted · set up",
+  declined: "Declined",
+};
+
+export function CrossSellPlanCard({ state, statuses, serviceDone, compact = false, onRetry }: {
+  state: { status: "idle" | "loading" | "ready" | "error"; plan: CrossSellPlan | null; error: string };
+  statuses: Record<string, PlanStatus>;
+  serviceDone: boolean;
+  compact?: boolean;
+  onRetry: () => void;
+}) {
+  if (state.status === "idle") return null;
+  if (state.status === "loading") {
+    return <section className="xsell loading" aria-label="Cross-sell plan" aria-busy="true">
+      <div className="section-heading"><div><small>PRE-CALL CROSS-SELL PLAN</small><h3>Reviewing the client&apos;s accounts…</h3></div><span className="assess-pill on"><i />AI building the plan</span></div>
+      <p className="xsell-summary">Generating this call&apos;s account detail and matching it against the Schwab offering catalog. The call is already connecting.</p>
+      <div className="xsell-skeleton"><i /><i /><i /></div>
+    </section>;
+  }
+  if (state.status === "error" || !state.plan) {
+    return <section className="xsell failed" aria-label="Cross-sell plan">
+      <CircleAlert size={18} />
+      <div><strong>Cross-sell plan unavailable</strong><p>{state.error || "The plan could not be generated."} Jordan will use normal discovery.</p></div>
+      <button type="button" onClick={onRetry}><RefreshCw size={13} /> Try again</button>
+    </section>;
+  }
+  const plan = state.plan;
+  const inDiscussion = plan.opportunities.some(item => statuses[item.offeringId] === "raised" || statuses[item.offeringId] === "interested");
+  const nextId = serviceDone && !inDiscussion ? plan.opportunities.find(item => (statuses[item.offeringId] ?? "planned") === "planned")?.offeringId : undefined;
+  const signal = (id: string) => plan.signals.find(item => item.id === id);
+  return <section className={"xsell" + (compact ? " compact" : "")} aria-label="Cross-sell plan">
+    <div className="section-heading">
+      <div><small>PRE-CALL CROSS-SELL PLAN</small><h3>{compact ? "Cross-sell plan outcome" : "Offerings to raise after service"}</h3></div>
+      <span className="xsell-badge"><Sparkles size={12} /> Generated for this call</span>
+    </div>
+    <p className="xsell-summary">{plan.summary}</p>
+    {!compact && <div className="xsell-signals" aria-label="Account signals">{plan.signals.map(item => <span key={item.id} title={item.detail}><Database size={11} />{item.label}</span>)}</div>}
+    <div className="xsell-grid">{plan.opportunities.map(item => {
+      const status = statuses[item.offeringId] ?? "planned";
+      return <article key={item.offeringId} className={"xsell-card status-" + status + (item.offeringId === nextId ? " next" : "")}>
+        <div className="xsell-meta"><span className="xsell-rank">PRIORITY #{item.priority}</span><span className={"xsell-status " + status}>{item.offeringId === nextId ? "Up next" : PLAN_STATUS[status]}</span></div>
+        <div className="xsell-top">
+          <OfferingIcon id={item.offeringId} size={18} />
+          <div className="offer-title"><h4>{item.offeringName}</h4><span>{item.family}</span></div>
+        </div>
+        <strong className="xsell-headline">{item.headline}</strong>
+        <p className="xsell-why"><Lightbulb size={13} /> {item.reason}</p>
+        <div className="xsell-facts">{item.signalIds.map(id => signal(id)).filter(Boolean).map(fact => <span key={fact!.id}>{fact!.detail}</span>)}</div>
+        {!compact && <blockquote className="xsell-opener"><small>OPENING LINE AFTER SERVICE</small>“{item.openingLine}”</blockquote>}
+        {!compact && <details className="offer-details">
+          <summary>Discovery &amp; setup <ChevronDown size={13} /></summary>
+          <p><strong>Ask</strong> {item.discoveryQuestion}</p>
+          <p><strong>Setup</strong> {item.setupPath}</p>
+          <p><strong>Watch out</strong> {item.watchOut}</p>
+        </details>}
+      </article>;
+    })}</div>
+    {!compact && plan.pivots.length > 0 && <details className="xsell-pivots">
+      <summary><Shuffle size={13} /> If the client brings up something else <ChevronDown size={13} /></summary>
+      <ul>{plan.pivots.map(item => <li key={item.clientTopic}><OfferingIcon id={item.offeringId} size={14} /><div><strong>“{item.clientTopic}”</strong> → {item.offeringName}<p>{item.approach}</p></div></li>)}</ul>
+    </details>}
+    <small className="fine-print">Synthetic account data generated for this training call. Account facts justify raising a topic; only the client&apos;s answers establish interest.</small>
   </section>;
 }
 
@@ -278,8 +357,8 @@ export function CallTransition({ customerTurn, representativeTurn, milestones, s
 
 /* ───────────────────────── Client profile ───────────────────────── */
 
-export function ClientProfilePanel({ name, age, profile, actions, turns, verified, onVerify }: {
-  name: string; age: number; profile: CustomerProfile; actions: TrainingAction[]; turns: Turn[]; verified: boolean; onVerify: () => void;
+export function ClientProfilePanel({ name, age, profile, plan, actions, turns, verified, onVerify }: {
+  name: string; age: number; profile: CustomerProfile; plan?: CrossSellPlan | null; actions: TrainingAction[]; turns: Turn[]; verified: boolean; onVerify: () => void;
 }) {
   const advisorChange = actions.findLast(action => ["financial_consultant", "wealth_advisory"].includes(action.offeringId) && ["schedule", "enroll"].includes(action.kind));
   const words = turns.filter(turn => turn.role === "customer").map(turn => turn.text.toLowerCase()).join(" ");
@@ -298,10 +377,11 @@ export function ClientProfilePanel({ name, age, profile, actions, turns, verifie
       <button type="button" onClick={onVerify}>Confirm verification <Check size={13} /></button>
     </div> : <>
       <div className="client-section"><small>CLIENT DETAILS</small><table className="profile-table"><tbody>
-        {[["Name", "K"], ["Client ID", profile.clientId ?? "Not on file"], ["Address", profile.address ?? "Not on file"], ["Book", profile.book ?? "Not assigned"], ["Segment", profile.segment ?? "Not classified"], ["Advisor", advisorChange ? advisorChange.summary : profile.advisor ?? "No advisor assigned"], ["Relationship", profile.relationship], ["Prior contacts", String(profile.priorContacts)], ["Last contact", profile.lastContact]].map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}
+        {[["Name", "K"], ["Client ID", profile.clientId ?? "Not on file"], ["Address", profile.address ?? "Not on file"], ["Book", plan ? formatMoney(plan.book) : profile.book ?? "Not assigned"], ["Segment", profile.segment ?? "Not classified"], ["Advisor", advisorChange ? advisorChange.summary : profile.advisor ?? "No advisor assigned"], ["Relationship", profile.relationship], ["Prior contacts", String(profile.priorContacts)], ["Last contact", profile.lastContact]].map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}
       </tbody></table></div>
       <div className="client-section"><small>ACCOUNTS HELD</small><table className="profile-table accounts-table"><thead><tr><th scope="col">Account</th><th scope="col">Details / status</th></tr></thead><tbody>
-        {profile.accounts.map(account => <tr key={account.name}><td>{account.name}</td><td>{account.detail}</td></tr>)}
+        {plan ? plan.accounts.map(account => <tr key={account.name} className={account.existing ? "" : "enriched"}><td>{account.name}{!account.existing && <em>{account.heldAway ? "Held away" : "New on file"}</em>}</td><td><b>{formatMoney(account.balance)}</b><small>{account.holdings}</small></td></tr>)
+          : profile.accounts.map(account => <tr key={account.name}><td>{account.name}</td><td>{account.detail}</td></tr>)}
         {actions.filter(action => action.kind === "open_account").map(action => <tr key={action.id}><td>{action.accountName}</td><td>Open · Setup complete</td></tr>)}
         {!profile.accounts.length && !actions.some(action => action.kind === "open_account") && <tr><td colSpan={2}>No existing account on file.</td></tr>}
       </tbody></table></div>
@@ -309,6 +389,7 @@ export function ClientProfilePanel({ name, age, profile, actions, turns, verifie
         {actions.filter(action => action.kind === "enroll").map(action => <tr key={action.id}><td>{action.offeringName}{action.accountName && <small>{action.accountName}</small>}</td><td>Enrolled · Setup complete</td></tr>)}
       </tbody></table></div>}
       {actions.length > 0 && <div className="client-section"><small>COMPLETED CHANGES</small>{actions.map(action => <div className="client-account training-change" key={action.id}><strong>{action.offeringName}</strong><span>{action.summary}</span><small>Saved · Available on your next visit</small></div>)}</div>}
+      {plan && <div className="client-section"><small>ACCOUNT SIGNALS · THIS CALL</small><ul className="signal-list">{plan.signals.map(item => <li key={item.id}><Database size={11} /><span><strong>{item.label}</strong>{item.detail}</span></li>)}</ul></div>}
       <div className="client-section"><small>CURRENT SERVICE NEED</small><p>{profile.context}</p></div>
     </>}
     <div className="client-section"><small>LEARNED IN THIS CALL</small>{learned.length ? <div className="learned">{learned.map(fact => <span key={fact.label}><Sparkles size={10} />{fact.label}</span>)}</div> : <p>Goals and household details appear as the client shares them.</p>}</div>

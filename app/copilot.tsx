@@ -10,6 +10,8 @@ import { callPathSummary } from "@/lib/call-path-summary";
 import { openAIConnectionError } from "@/lib/openai-errors";
 import { RELATIONSHIP_PATHS } from "@/lib/relationship-paths";
 import { TAXONOMY } from "@/lib/taxonomy";
+import { offeringMention } from "@/lib/offering-journey";
+import { CROSS_SELL_HISTORY_KEY, crossSellCueContext, crossSellSystemItem, planStatuses, recentOfferings, rememberOfferings, type CrossSellPlan, type PlanStatus } from "@/lib/cross-sell";
 import {
   AudioLines,
   CircleAlert,
@@ -29,6 +31,7 @@ import {
   CallWaveform,
   ClientProfilePanel,
   CompletedCallSummary,
+  CrossSellPlanCard,
   CueHero,
   OpportunityBoard,
   StageTrack,
@@ -37,6 +40,7 @@ import {
 } from "./studio-ui";
 
 type Draft = { id: string; role: Turn["role"]; text: string };
+type CrossSellState = { status: "idle" | "loading" | "ready" | "error"; plan: CrossSellPlan | null; error: string };
 type PendingCustomerItem = { responseId: string; parts: Map<number, string> };
 type PendingCue = {
   version: number;
@@ -90,6 +94,12 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   // Stage and offering focus persist between cues so the view does not flicker while the next one streams.
   const [stage, setStage] = useState<CueStage | null>(null);
   const [focusOfferingId, setFocusOfferingId] = useState("");
+  // Pre-call cross-sell plan, generated fresh for every call.
+  const [crossSell, setCrossSell] = useState<CrossSellState>({ status: "idle", plan: null, error: "" });
+  const crossSellRef = useRef<CrossSellPlan | null>(null);
+  const crossSellVersionRef = useRef(0);
+  const crossSellSentRef = useRef("");
+  const planStatusRef = useRef<Record<string, PlanStatus>>({});
   const [retainedOfferings, setRetainedOfferings] = useState<OfferingCard[]>([]);
   const [trainingActions, setTrainingActions] = useState<TrainingAction[]>([]);
   const trainingActionsRef = useRef<TrainingAction[]>([]);
@@ -204,6 +214,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const latestJordanTurn = turns.findLast((turn) => turn.role === "representative");
   const reasonConfirmed = !!callReason && analysis?.callReason.reason === callReason.reason && analysis.callReason.category === callReason.category;
   const focusName = RELATIONSHIP_PATHS.find(path => path.id === (cue?.complete ? cue.offeringId : focusOfferingId))?.name ?? "";
+  const planStatus = crossSell.plan ? planStatuses(crossSell.plan, turns, analysis?.relationshipPaths ?? [], callActions, offeringMention) : {};
+  planStatusRef.current = planStatus;
 
   useEffect(() => {
     if (status !== "live") return;
@@ -235,6 +247,10 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
   function resetCallState() {
     reportVersionRef.current += 1;
+    crossSellVersionRef.current += 1;
+    crossSellRef.current = null;
+    crossSellSentRef.current = "";
+    setCrossSell({ status: "idle", plan: null, error: "" });
     setReportUpdating(false);
     completedToolCallsRef.current.clear();
     cancelAnalysis();
@@ -426,6 +442,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       context: cueContextRef.current,
       assessment: assessmentSummary(),
       completedActions: trainingActionsRef.current,
+      crossSellPlan: crossSellCueContext(crossSellRef.current, planStatusRef.current),
     });
     if (!send(request)) replyToClient(null);
   }
@@ -932,6 +949,11 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         return;
       }
       if (eventId.startsWith("cue-del-")) return;
+      if (eventId.startsWith("xsell-")) {
+        crossSellSentRef.current = "";
+        setAnalysisError("Jordan could not receive the cross-sell plan. The call continues with normal discovery.");
+        return;
+      }
       if (eventId.startsWith("cue-")) {
         const pending = cuePendingRef.current;
         if (eventId.startsWith("cue-req-") && pending && !pending.replied && !audioCueUnsupportedRef.current) {
@@ -1009,6 +1031,41 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     lastScenarioIdRef.current = picked.id;
     resetForScenario(picked.id);
     void startCall(picked.id);
+    void loadCrossSell(picked.id);
+  }
+
+  /** Generate this call's synthetic account enrichment and cross-sell plan, in parallel with connecting. */
+  async function loadCrossSell(activeScenarioId: string) {
+    const version = ++crossSellVersionRef.current;
+    setCrossSell({ status: "loading", plan: null, error: "" });
+    let history: unknown = {};
+    try { history = JSON.parse(localStorage.getItem(CROSS_SELL_HISTORY_KEY) ?? "{}"); } catch { /* storage unavailable */ }
+    try {
+      const response = await fetch("/api/cross-sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scenarioId: activeScenarioId, recentOfferingIds: recentOfferings(history, activeScenarioId), completedOfferingIds: trainingActionsRef.current.map(action => action.offeringId) }),
+        signal: AbortSignal.timeout(40000),
+      });
+      const payload = await response.json() as CrossSellPlan & { error?: string };
+      if (version !== crossSellVersionRef.current) return;
+      if (!response.ok || !Array.isArray(payload.opportunities)) throw new Error(payload.error || "The cross-sell plan could not be generated.");
+      crossSellRef.current = payload;
+      setCrossSell({ status: "ready", plan: payload, error: "" });
+      try { localStorage.setItem(CROSS_SELL_HISTORY_KEY, JSON.stringify(rememberOfferings(history, payload))); } catch { /* storage unavailable */ }
+      shareCrossSellWithJordan();
+    } catch (error) {
+      if (version !== crossSellVersionRef.current) return;
+      setCrossSell({ status: "error", plan: null, error: error instanceof Error && error.name !== "TimeoutError" ? error.message : "The cross-sell plan timed out." });
+    }
+  }
+
+  /** Give Jordan the plan as private context once both the plan and the call are ready. */
+  function shareCrossSellWithJordan() {
+    const plan = crossSellRef.current;
+    if (!plan || crossSellSentRef.current === plan.id || channelRef.current?.readyState !== "open") return;
+    const itemId = ("xsell_" + plan.id.replace(/-/g, "")).slice(0, 32);
+    if (send({ event_id: "xsell-" + itemId, ...crossSellSystemItem(plan, itemId) })) crossSellSentRef.current = plan.id;
   }
 
   async function startCall(activeScenarioId: string) {
@@ -1077,6 +1134,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         startedAtRef.current = Date.now();
         setStatus("live");
         sendPrimaryReply();
+        shareCrossSellWithJordan();
       };
 
       const offer = await peer.createOffer();
@@ -1203,16 +1261,18 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         <section className="coach" aria-label="AI coach">
           <CallReasonHero reason={callReason} latencyMs={reasonLatencyMs} flash={reasonFlash} confirmed={reasonConfirmed} live={status === "live"} clientSpeaking={speaker === "customer"} onEvidence={jumpToEvidence} />
           {status === "ended" ? <>
+            <CrossSellPlanCard state={crossSell} statuses={planStatus} serviceDone={relationshipReady} compact onRetry={() => selected && void loadCrossSell(selected.id)} />
             <CompletedCallSummary paths={completedPaths} turns={transcriptEntries} actions={callActions} serviceStatus={analysis?.serviceStatus} updating={reportUpdating} onEvidence={jumpToEvidence} />
 
           </> : <>
             <CueHero cue={cue} status={cueStatus} latencyMs={cueLatencyMs} jordanLine={cueStatus === "delivered" ? latestJordanTurn?.text ?? "" : ""} offeringName={focusName} live={status === "live"} onEvidence={jumpToEvidence} />
+            <CrossSellPlanCard state={crossSell} statuses={planStatus} serviceDone={relationshipReady} onRetry={() => selected && void loadCrossSell(selected.id)} />
             <OpportunityBoard paths={offeringCards} analysis={analysis} turns={turns} assessing={analyzing} serviceDone={relationshipReady} onEvidence={jumpToEvidence} />
           </>}
           {analysisError && <div className="soft-error" role="status"><CircleAlert size={15} />{analysisError}</div>}
         </section>
 
-        {selected?.profile && <ClientProfilePanel name="K" age={selected.age} profile={selected.profile} actions={trainingActions} turns={turns} verified={accountVerified} onVerify={() => setVerificationConfirmed(true)} />}
+        {selected?.profile && <ClientProfilePanel name="K" age={selected.age} profile={selected.profile} plan={crossSell.plan} actions={trainingActions} turns={turns} verified={accountVerified} onVerify={() => setVerificationConfirmed(true)} />}
         {!selected?.profile && <aside className="client-panel" aria-label="Client profile"><div className="client-section"><small>CLIENT PROFILE</small><h2>Waiting for a caller</h2><p>The client profile appears when you pick the call. Accounts unlock after verification.</p></div></aside>}
       </main>
     </div>

@@ -416,3 +416,167 @@ test("training actions persist before success and repeated authorization is idem
   assert.equal(second.action.id, "call-1");
   assert.throws(() => persistTrainingAction(validated, [], "call-3", {setItem: () => { throw new Error("Storage unavailable"); }}));
 });
+
+import { CROSS_SELL_SCHEMA, crossSellCueContext, crossSellRequestBody, crossSellSystemItem, parseBalance, parseCrossSellPlan, planStatuses, recentOfferings, rememberOfferings } from "../lib/cross-sell";
+import { offeringMention } from "../lib/offering-journey";
+import { POST as createCrossSellPlan } from "../app/api/cross-sell/route";
+
+const xsellProfile = CUSTOMER_PROFILES["relationship-01"];
+function modelPlan() {
+  return {
+    summary: "Large idle cash balance in the IRA and irregular brokerage deposits.",
+    accounts: [
+      { name: "Traditional IRA", type: "traditional_ira", balance: 999999, holdings: "38% cash ($114,000), two index funds", heldAway: false },
+      { name: "Self-directed brokerage", type: "brokerage", balance: 12000, holdings: "Three ETFs, $3,100 cash", heldAway: false },
+      { name: "Workplace 401(k)", type: "workplace_plan", balance: 86000, holdings: "Target-date fund", heldAway: true },
+      { name: "Schwab Bank checking", type: "bank", balance: 9000, holdings: "Linked for transfers", heldAway: false },
+      { name: "Third extra account", type: "other", balance: 1, holdings: "x", heldAway: false },
+    ],
+    signals: [
+      { id: "s1", label: "$114k idle IRA cash", detail: "$114,000 has sat in cash in the Traditional IRA for seven months.", accountName: "Traditional IRA" },
+      { id: "s2", label: "Cash building in brokerage", detail: "Deposits in the brokerage account stay in cash for weeks.", accountName: "Self-directed brokerage" },
+      { id: "s1", label: "duplicate", detail: "dup", accountName: "x" },
+    ],
+    opportunities: [
+      { offeringId: "automated_investing", headline: "Put idle IRA cash to work", reason: "Cash has sat uninvested for months.", signalIds: ["s1", "missing"], openingLine: "I noticed a sizable cash balance in your IRA. Would it help to talk about options for it?", discoveryQuestion: "What is that cash meant for?", setupPath: "Enroll the IRA after preferences.", watchOut: "May be reserved for a near-term need." },
+      { offeringId: "made_up_offering", headline: "x", reason: "x", signalIds: ["s1"], openingLine: "x", discoveryQuestion: "x", setupPath: "x", watchOut: "x" },
+      { offeringId: "automated_investing", headline: "duplicate", reason: "x", signalIds: ["s1"], openingLine: "x", discoveryQuestion: "x", setupPath: "x", watchOut: "x" },
+      { offeringId: "schwab_plan", headline: "No supporting data", reason: "x", signalIds: ["nope"], openingLine: "x", discoveryQuestion: "x", setupPath: "x", watchOut: "x" },
+      { offeringId: "fractional_shares", headline: "Invest each deposit", reason: "Small deposits sit in cash.", signalIds: ["s2"], openingLine: "I see deposits waiting in cash. Want to hear a simple way to invest small amounts?", discoveryQuestion: "Do you prefer choosing investments yourself?", setupPath: "Enroll the brokerage account.", watchOut: "Prefers hands-off management." },
+    ],
+    pivots: [
+      { clientTopic: "Am I saving enough for retirement?", offeringId: "schwab_plan", approach: "Offer a plan that includes the 401(k)." },
+      { clientTopic: "invalid", offeringId: "nope", approach: "x" },
+    ],
+  };
+}
+
+test("the cross-sell request is a strict structured-output call over the full catalog", () => {
+  const body = crossSellRequestBody({ scenarioId: "relationship-01", profile: xsellProfile, variationSeed: 42, recentOfferingIds: ["automated_investing"], completedOfferingIds: ["schwab_plan"] });
+  assert.equal(body.text.format.type, "json_schema");
+  assert.equal(body.text.format.strict, true);
+  assert.equal(body.store, false);
+  const input = JSON.parse(body.input);
+  assert.equal(input.variationSeed, 42);
+  assert.deepEqual(input.recentOfferingIds, ["automated_investing"]);
+  assert.deepEqual(input.completedOfferingIds, ["schwab_plan"]);
+  assert.equal(input.clientRecord.accounts.length, xsellProfile.accounts.length);
+  assert.ok(!input.offerings.some((item: { id: string }) => item.id === "service_recovery"));
+  assert.ok(!JSON.stringify(CROSS_SELL_SCHEMA).match(/maxLength|minItems|maxItems/), "strict mode keywords only");
+  assert.ok(body.instructions.includes("Never make an ID in recentOfferingIds the first opportunity"));
+});
+
+test("plan validation keeps recorded balances and drops unsupported or invented offerings", () => {
+  const plan = parseCrossSellPlan(modelPlan(), { scenarioId: "relationship-01", profile: xsellProfile }, "plan-1");
+  assert.equal(plan.accounts.find(item => item.name === "Traditional IRA")?.balance, 300000, "existing balances are not rewritten");
+  assert.match(plan.accounts.find(item => item.name === "Traditional IRA")!.holdings, /38% cash/);
+  assert.equal(plan.accounts.filter(item => !item.existing).length, 2, "at most two new accounts");
+  assert.equal(plan.book, 12000 + 300000 + 9000, "held-away assets are excluded from the book");
+  assert.equal(plan.signals.length, 2, "duplicate signal IDs are removed");
+  assert.deepEqual(plan.opportunities.map(item => [item.offeringId, item.priority]), [["automated_investing", 1], ["fractional_shares", 2]]);
+  assert.deepEqual(plan.opportunities[0].signalIds, ["s1"]);
+  assert.equal(plan.opportunities[0].offeringName, "Schwab Intelligent Portfolios");
+  assert.deepEqual(plan.pivots.map(item => item.offeringId), ["schwab_plan"]);
+  const completed = parseCrossSellPlan(modelPlan(), { scenarioId: "relationship-01", profile: xsellProfile, completedOfferingIds: ["automated_investing"] }, "plan-2");
+  assert.equal(completed.opportunities[0].offeringId, "fractional_shares", "completed offerings are not re-proposed");
+  const none = { ...modelPlan(), opportunities: modelPlan().opportunities.filter(item => item.offeringId === "made_up_offering") };
+  assert.throws(() => parseCrossSellPlan(none, { scenarioId: "relationship-01", profile: xsellProfile }, "plan-3"));
+  assert.equal(parseBalance("$0 · Open; incoming rollover pending"), 0);
+  assert.equal(parseBalance("$1.2M · Active"), 1200000);
+});
+
+test("Jordan receives the plan as private context and the coach sees live outcomes", () => {
+  const plan = parseCrossSellPlan(modelPlan(), { scenarioId: "relationship-01", profile: xsellProfile }, "plan-1");
+  const event = crossSellSystemItem(plan, "xsell_1");
+  assert.equal(event.type, "conversation.item.create");
+  assert.equal(event.item.role, "system");
+  const text = event.item.content[0].text;
+  assert.match(text, /Do not read it aloud/);
+  assert.match(text, /only after the original service request is resolved/);
+  assert.match(text, /I noticed a sizable cash balance in your IRA/);
+  assert.match(text, /\$114,000 has sat in cash/);
+  assert.match(text, /Am I saving enough for retirement/);
+  const context = crossSellCueContext(plan, { automated_investing: "declined" })!;
+  assert.equal(context.opportunities[0].status, "declined");
+  assert.equal(context.opportunities[1].status, "planned");
+  const request = cueRequest({ version: 1, turns, crossSellPlan: context });
+  assert.equal(JSON.parse((request.response.input[0] as { content: Array<{ text: string }> }).content[0].text).crossSellPlan.opportunities.length, 2);
+  assert.match(request.response.instructions, /crossSellPlan, when supplied/);
+  assert.equal(crossSellCueContext(null), null);
+});
+
+test("plan outcomes follow the conversation: raised, interested, declined, accepted", () => {
+  const plan = parseCrossSellPlan(modelPlan(), { scenarioId: "relationship-01", profile: xsellProfile }, "plan-1");
+  const talk = [
+    { id: "c1", role: "customer", text: "I need a monthly transfer." },
+    { id: "r1", role: "representative", text: "Done. I noticed idle cash; Schwab Intelligent Portfolios could help. Interested?" },
+    { id: "c2", role: "customer", text: "Yes, tell me more." },
+  ];
+  assert.deepEqual(planStatuses(plan, talk.slice(0, 1), [], [], offeringMention), { automated_investing: "planned", fractional_shares: "planned" });
+  assert.equal(planStatuses(plan, talk.slice(0, 2), [], [], offeringMention).automated_investing, "raised");
+  assert.equal(planStatuses(plan, talk, [{ id: "automated_investing", status: "emerging", evidenceIds: ["c2"] }], [], offeringMention).automated_investing, "interested");
+  assert.equal(planStatuses(plan, talk, [{ id: "automated_investing", status: "ruled_out", evidenceIds: ["c2"] }], [], offeringMention).automated_investing, "declined");
+  assert.equal(planStatuses(plan, talk, [], [{ offeringId: "automated_investing", consentTurnId: "c2" }], offeringMention).automated_investing, "accepted");
+  assert.equal(planStatuses(plan, talk, [], [{ offeringId: "automated_investing", consentTurnId: "older-call" }], offeringMention).automated_investing, "raised", "past calls do not count");
+});
+
+test("each call steers away from the offerings featured last time", () => {
+  const plan = parseCrossSellPlan(modelPlan(), { scenarioId: "relationship-01", profile: xsellProfile }, "plan-1");
+  const history = rememberOfferings({ "relationship-02": ["schwab_plan"] }, plan);
+  assert.deepEqual(recentOfferings(history, "relationship-01"), ["automated_investing", "fractional_shares"]);
+  assert.deepEqual(recentOfferings(history, "relationship-02"), ["schwab_plan"]);
+  assert.deepEqual(recentOfferings("garbage", "relationship-01"), []);
+});
+
+test("the cross-sell route generates a validated plan through the Responses API", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENAI_API_KEY;
+  let captured: Record<string, unknown> = {};
+  process.env.OPENAI_API_KEY = "test-only-dummy-key";
+  globalThis.fetch = async (url, options) => {
+    assert.equal(String(url), "https://api.openai.com/v1/responses");
+    captured = JSON.parse(String(options?.body));
+    return new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: JSON.stringify(modelPlan()) }] }] }), { status: 200 });
+  };
+  const call = (body: unknown) => createCrossSellPlan(new Request("http://localhost/api/cross-sell", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+  try {
+    const response = await call({ scenarioId: "relationship-01", recentOfferingIds: ["fractional_shares"] });
+    assert.equal(response.status, 200);
+    const plan = await response.json() as { id: string; opportunities: Array<{ offeringId: string }> };
+    assert.equal(plan.opportunities[0].offeringId, "automated_investing");
+    assert.equal(typeof plan.id, "string");
+    assert.deepEqual(JSON.parse(String(captured.input)).recentOfferingIds, ["fractional_shares"]);
+    assert.equal(typeof JSON.parse(String(captured.input)).variationSeed, "number");
+    assert.equal((await call({ scenarioId: "nope" })).status, 404);
+    globalThis.fetch = async () => new Response(JSON.stringify({ output: [{ content: [{ type: "output_text", text: "{\"bad\":true}" }] }] }), { status: 200 });
+    assert.equal((await call({ scenarioId: "relationship-01" })).status, 502, "invalid model output is rejected");
+    delete process.env.OPENAI_API_KEY;
+    assert.equal((await call({ scenarioId: "relationship-01" })).status, 503);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});
+
+test("Jordan's instructions and the shared objective cover the pre-call plan", async () => {
+  assert.match(OFFERING_CONVERSATION_OBJECTIVE, /pre-call cross-sell plan is available, proactively raise its highest-priority opportunity/);
+  assert.match(OFFERING_CONVERSATION_OBJECTIVE, /only the client's answer establishes interest/);
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.OPENAI_API_KEY;
+  let instructions = "";
+  process.env.OPENAI_API_KEY = "test-only-dummy-key";
+  globalThis.fetch = async (_url, options) => {
+    instructions = JSON.parse(String(options?.body)).session.instructions;
+    return new Response(JSON.stringify({ value: "test-only-session" }), { status: 200 });
+  };
+  try {
+    await createRealtimeSession(new Request("http://localhost/api/realtime/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ scenarioId: "relationship-01" }) }));
+    assert.match(instructions, /# Pre-call cross-sell plan/);
+    assert.match(instructions, /Never read the plan aloud/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalKey;
+  }
+});
