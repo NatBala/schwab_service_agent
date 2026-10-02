@@ -25,6 +25,15 @@ The representative and both private coaches share one offering objective: resolv
 
 Completed actions are saved in this browser's local storage under `schwab-training-actions-k-v1`. New accounts appear in the accounts table; accepted enrollments appear with the selected account and completion status in Offering enrollments. Other changes appear in the completed-changes section. Advisor-related actions also appear in advisor status. These records survive reloads and future calls in the same browser. They do not execute real Schwab transactions or create real brokerage accounts. Clearing browser storage removes them.
 
+## Pre-call cross-sell plan
+
+Each call gets a new LLM-generated plan (`POST /api/cross-sell`, `lib/cross-sell.ts`), built in parallel with connecting:
+
+- **Enriched client record.** Every existing account keeps its recorded balance. The model adds holdings detail, up to two more accounts (Schwab or held away) and 3–6 observable account signals, such as "$114,000 has sat in cash in the IRA for seven months". The profile panel shows this data for the call.
+- **2–3 planned offerings.** These are catalog offerings the signals support. Each comes with the reason, an opening line for after the service request, a discovery question, the setup path and a watch-out. There are also 2–4 pivots: how to handle other topics the client may raise.
+- **Steering.** The plan reaches Jordan as a private system message and reaches the live coach with each offering's outcome so far: planned, raised, interested, accepted or declined. After service, the coach directs Jordan to open with the top planned offering. If the client raises something else, the matching pivot is used. A decline moves to the next offering at most once. Account data justifies raising a topic; only the client's answers establish interest.
+- **Variety and safety.** A random seed, plus the offerings featured in recent calls (browser storage), keeps each call different. The server rejects unknown offerings, offerings without supporting signals, already-completed offerings and changed balances. If generation fails, the call continues with normal discovery and the card offers a retry.
+
 ## Live coaching and reports
 
 - `POST /api/realtime/session` creates a short-lived Realtime client secret. WebRTC carries audio; streaming captions and completed transcripts share one chronological feed. Partial captions survive interruptions and call end.
