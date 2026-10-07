@@ -219,7 +219,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "Let me summarize. We established the $800 monthly transfer into your current self-directed brokerage account. The transfer moves cash but does not automatically invest it. You identified retirement as the goal, a timeline of more than 25 years, separate emergency savings, and a preference for having the portfolio managed. No investment change was authorized today. I’ll now connect you with a planning specialist."
+        "text": "Let me summarize. We established the $800 monthly transfer into your current self-directed brokerage account. The transfer moves cash but does not automatically invest it. You identified retirement as the goal, a timeline of more than 25 years, separate emergency savings, and a preference for having the portfolio managed. No investment change was made today. I’ll now connect you with a planning specialist."
       },
       {
         "speaker": "customer",

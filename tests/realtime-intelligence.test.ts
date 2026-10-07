@@ -276,22 +276,27 @@ test("K has a male portrait and complete fictional CRM fields in every scenario"
   }
   assert.ok(SCENARIOS.every(scenario => scenario.callerName === "K"));
 });
-test("training completion requires latest explicit authorization after final review", () => {
-  const input = { offeringId: "automated_investing", kind: "open_account", accountName: "Intelligent Portfolios account", summary: "Opened the training account", steps: ["Reviewed account type", "Reviewed funding choice"], consentText: "Yes, proceed." };
-  const consent = [{id: "review", role: "representative", text: "Please confirm: may I proceed with opening this training account?"}, {id: "consent", role: "customer", text: "Yes, proceed."}];
-  assert.equal(validateTrainingAction(input, consent).consentTurnId, "consent");
-  assert.throws(() => validateTrainingAction({...input, consentText: "No, do not proceed."}, [...consent.slice(0,1), {id: "no", role: "customer", text: "No, do not proceed."}]));
-  assert.throws(() => validateTrainingAction(input, [...consent, {id: "later", role: "customer", text: "Wait, cancel that."}]));
-  assert.throws(() => validateTrainingAction(input, [{id: "interest", role: "representative", text: "Are you interested in opening an account?"}, consent[1]]));
-  assert.throws(() => validateTrainingAction({...input, offeringId: "invented"}, consent));
+test("completion needs no authorization: a natural yes or a plain answer completes the change", () => {
+  const input = { offeringId: "automated_investing", kind: "open_account", accountName: "Intelligent Portfolios account", summary: "Opened the training account", steps: ["Selected funding"] };
+  for (const reply of ["Sounds good.", "Yes.", "Use my brokerage account.", "Sure, why not", "Let's do it"]) {
+    const transcript = [{id: "offer", role: "representative", text: "Want me to set that up with your brokerage account?"}, {id: "answer", role: "customer", text: reply}];
+    assert.equal(validateTrainingAction(input, transcript).consentTurnId, "answer", reply);
+  }
+  // No confirmation question by Jordan, no quoted consent and no setup steps are required.
+  const plain = [{id: "ask", role: "customer", text: "Please open a managed account for my IRA cash."}];
+  assert.equal(validateTrainingAction({ ...input, steps: [] }, plain).steps.length, 0);
+  assert.throws(() => validateTrainingAction({...input, offeringId: "invented"}, plain));
+  assert.throws(() => validateTrainingAction(input, [{id: "only-rep", role: "representative", text: "Hello"}]));
 });
-test("completion tool exposes exact catalog IDs and accepts a natural authorization review", () => {
+test("the completion tool and every prompt are free of authorization steps", () => {
   assert.deepEqual(TRAINING_ACTION_TOOL.parameters.properties.offeringId.enum, [...RELATIONSHIP_PATHS.map(path => path.id), "service_request"]);
-  const consent = "I authorize you to complete the setup.";
-  const input = {offeringId:"automated_investing",kind:"enroll",accountName:"Schwab brokerage",summary:"Enrollment setup completed",steps:["Reviewed goal, funding and account"],consentText:consent};
-  const transcript = [{id:"review",role:"representative",text:"Your automated retirement setup uses the selected brokerage. Do I have your authorization to submit it?"},{id:"consent",role:"customer",text:consent}];
-  assert.equal(validateTrainingAction(input, transcript).consentTurnId, "consent");
-  assert.throws(() => validateTrainingAction({...input,consentText:"I'm interested."}, [...transcript.slice(0,1),{id:"interest",role:"customer",text:"I'm interested."}]));
+  assert.ok(!("consentText" in TRAINING_ACTION_TOOL.parameters.properties));
+  assert.ok(!(TRAINING_ACTION_TOOL.parameters.required as readonly string[]).includes("consentText"));
+  const asksForAuthorization = /(?<!never )ask (?:the client )?for (?:final )?(?:authori[sz]ation|consent|confirmation)|after final (?:authori[sz]ation|consent)|quote the latest client authori[sz]ation/i;
+  assert.doesNotMatch(OFFERING_CONVERSATION_OBJECTIVE, asksForAuthorization);
+  assert.match(OFFERING_CONVERSATION_OBJECTIVE, /Never ask for authorization/);
+  assert.doesNotMatch(cueRequest({ version: 1, turns }).response.instructions, asksForAuthorization);
+  assert.doesNotMatch(coachingRequest(turns, 1).response.instructions, asksForAuthorization);
 });
 test("journey shows every offering's client trigger, transition and introduction", () => {
   const transcript = [
@@ -338,6 +343,8 @@ test("realtime session never asks for verification and provides the training com
     assert.equal(response.status,200);
     assert.ok(captured.session?.tools?.some(tool => tool.name === "complete_training_action"));
     assert.ok(captured.session?.instructions?.includes("Never ask the caller to verify their identity"));
+    assert.ok(captured.session?.instructions?.includes("including tax planning"));
+    assert.ok(!/ask for final authori[sz]ation|ask for final consent|Quote the latest client authori[sz]ation|consentText/i.test(captured.session?.instructions ?? ""));
     assert.ok(!/demo verification\?|May I complete a quick/i.test(captured.session?.instructions ?? ""));
     assert.ok(captured.session?.instructions?.includes("The tool must return success before you claim completion"));
     assert.ok(captured.session?.instructions?.includes("Training account opened"));
@@ -374,9 +381,9 @@ test("both private coaches keep the offering objective and receive saved executi
   assert.ok(directive.includes("After tool success, confirm that saved result"));
 });
 
-test("authorized enrollments retain the selected account across saved profile reloads", () => {
+test("completed enrollments retain the selected account across saved profile reloads", () => {
   const turns = [{id:"review", role:"representative", text:"Confirm enrollment in Schwab Intelligent Portfolios using your brokerage account?"}, {id:"consent", role:"customer", text:"Yes, please proceed."}];
-  const validated = validateTrainingAction({offeringId:"automated_investing",kind:"enroll",accountName:"Self-directed brokerage",summary:"Enrolled in Schwab Intelligent Portfolios",steps:["Reviewed investing goal and horizon", "Selected brokerage account and funding", "Reviewed choices and received consent"],consentText:turns[1].text}, turns);
+  const validated = validateTrainingAction({offeringId:"automated_investing",kind:"enroll",accountName:"Self-directed brokerage",summary:"Enrolled in Schwab Intelligent Portfolios",steps:["Reviewed investing goal and horizon", "Selected brokerage account and funding"]}, turns);
   let saved = "";
   persistTrainingAction(validated, [], "enrollment-1", {setItem: (_key, value) => { saved = value; }});
   const reloaded = JSON.parse(saved);
@@ -386,7 +393,7 @@ test("authorized enrollments retain the selected account across saved profile re
   assert.equal(reloaded[0].consentTurnId, "consent");
 });
 
-test("training actions persist before success and repeated authorization is idempotent", () => {
+test("training actions persist before success and repeated completion is idempotent", () => {
   const validated = {offeringId:"automated_investing",offeringName:"Schwab Intelligent Portfolios",kind:"open_account" as const,accountName:"Managed training account",summary:"Training account added",steps:["Reviewed funding", "Confirmed setup"],consentTurnId:"consent"};
   let saved = "";
   const storage = {setItem: (key: string, value: string) => { assert.equal(key, "schwab-training-actions-k-v1"); saved = value; }};

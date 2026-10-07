@@ -201,7 +201,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     if (path) {
       path.evidenceIds = [...new Set([...path.evidenceIds, action.consentTurnId])];
       path.assessed = true;
-      if (!path.rationale || path.status === "possible") path.rationale = "The client authorized the action: " + action.summary;
+      if (!path.rationale || path.status === "possible") path.rationale = "The client agreed to: " + action.summary;
       path.status = "explore";
     }
   }
