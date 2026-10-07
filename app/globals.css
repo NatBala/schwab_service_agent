@@ -136,7 +136,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* ───────────────────────── Stage track ───────────────────────── */
 .stage-track {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
 }
 .stage-track li {
   position: relative; display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 12px;
@@ -395,8 +395,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .client-photo > span.ok { background: var(--teal); }
 .client-hero h2 { margin: 10px 0 2px; font-size: 18px; letter-spacing: -.02em; }
 .client-hero p { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
-.verify-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: var(--amber-ink); background: #fffbeb; }
-.verify-chip.ok { color: var(--teal-ink); background: #ecfdf5; }
 .client-brief { margin: 12px 14px 0; padding: 11px 12px; border-radius: 13px; background: #faf5ff; border: 1px solid #ede9fe; font-size: 12.5px; color: #3b0764; }
 .client-brief summary { list-style: none; display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 700; color: #6d28d9; font-size: 12px; }
 .client-brief summary svg:last-child { margin-left: auto; }
@@ -404,10 +402,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .client-brief p { margin: 8px 0 6px; line-height: 1.5; }
 .client-brief ul { margin: 0; padding-left: 17px; line-height: 1.5; color: #4c1d95; }
 .client-brief small { display: block; margin-top: 6px; color: #7c3aed; font-size: 11px; }
-.client-locked { margin: 12px 14px 0; padding: 14px; border-radius: 13px; text-align: center; background: var(--card-soft); border: 1px dashed #cbd5e1; color: var(--muted); }
-.client-locked strong { display: block; margin: 6px 0 2px; color: var(--ink); font-size: 13.5px; }
-.client-locked p { margin: 0 0 10px; font-size: 12px; line-height: 1.5; }
-.client-locked button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border-radius: 10px; border: 1px solid #bfdbfe; background: #eff6ff; color: var(--blue-2); font-weight: 650; font-size: 12.5px; }
 .client-section { padding: 13px 16px 0; }
 .client-section > small { display: block; margin-bottom: 6px; font-size: 10px; letter-spacing: .13em; font-weight: 800; color: var(--muted); }
 .client-section p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
@@ -470,7 +464,6 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .callbar-actions .btn-call, .callbar-actions .btn-end { flex: 1; justify-content: center; }
 }
 
-.verification-confirmation { padding: 10px 14px; color: #065f46; background: #ecfdf5; border-bottom: 1px solid #a7f3d0; font-size: 13px; }
 
 .schwab-logo { display: block; width: 64px; height: 64px; object-fit: contain; }
 

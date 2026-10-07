@@ -1,4 +1,4 @@
-const STAGES = ["greeting", "verification", "servicing", "discovery", "recommendation", "closing"] as const;
+const STAGES = ["greeting", "servicing", "discovery", "recommendation", "closing"] as const;
 type Stage = typeof STAGES[number];
 export function advanceCallStage(current: Stage | null, next: Stage | null): Stage | null {
   if (!next) return current;

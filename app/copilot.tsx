@@ -5,7 +5,6 @@ import Image from "next/image";
 import { validateTrainingAction, persistTrainingAction, type TrainingAction } from "@/lib/training-actions";
 import { advanceCallStage, retainOfferings } from "@/lib/call-progress";
 import { canRunBackgroundCoaching, spokenReplyRequest } from "@/lib/realtime-turns";
-import { demoVerificationComplete } from "@/lib/demo-verification";
 import { callPathSummary } from "@/lib/call-path-summary";
 import { openAIConnectionError } from "@/lib/openai-errors";
 import { RELATIONSHIP_PATHS } from "@/lib/relationship-paths";
@@ -83,7 +82,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const [typedReply, setTypedReply] = useState("");
   const [micAvailable, setMicAvailable] = useState(true);
   const [openingMic, setOpeningMic] = useState(false);
-  const [verificationConfirmed, setVerificationConfirmed] = useState(false);
   const [cue, setCue] = useState<LiveCue | null>(null);
   const [cueStatus, setCueStatus] = useState<CueStatus>("idle");
   const [cueLatencyMs, setCueLatencyMs] = useState<number | null>(null);
@@ -172,7 +170,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     [scenarioId, scenarios],
   );
   const draftList = Object.values(drafts).filter(draft => !turns.some(turn => turn.id === draft.id));
-  const accountVerified = verificationConfirmed || demoVerificationComplete(turns);
   const transcriptEntries = [
     ...turns.map(turn => ({ ...turn, partial: false })),
     ...draftList.map(draft => ({ ...draft, at: itemTimeRef.current.get(draft.id) ?? 0, partial: true })),
@@ -210,7 +207,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   }
   const summaryPaths = callPathSummary(reportPaths, transcriptEntries);
   const completedPaths = [...reportPaths.filter(path => path.id !== "service_recovery" && offeringCards.some(card => card.id === path.id)), ...summaryPaths.filter(path => !offeringCards.some(card => card.id === path.id))].map(path => ({ ...path, evidenceIds: [...new Set([...journeyEvents.filter(event => event.pathId === path.id).flatMap(event => event.evidenceIds), ...path.evidenceIds])] }));
-  const displayStage = status === "ended" ? "closing" : advanceCallStage(stage, accountVerified ? "servicing" : status === "live" ? "greeting" : null);
+  const displayStage = status === "ended" ? "closing" : advanceCallStage(stage, status === "live" ? "greeting" : null);
   const latestJordanTurn = turns.findLast((turn) => turn.role === "representative");
   const reasonConfirmed = !!callReason && analysis?.callReason.reason === callReason.reason && analysis.callReason.category === callReason.category;
   const focusName = RELATIONSHIP_PATHS.find(path => path.id === (cue?.complete ? cue.offeringId : focusOfferingId))?.name ?? "";
@@ -313,7 +310,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     setStatus("ready");
     setTypedReply("");
     setMicAvailable(true);
-    setVerificationConfirmed(true);
   }
 
   function stopConnection(nextStatus: CallStatus = "ended") {
@@ -1071,7 +1067,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   async function startCall(activeScenarioId: string) {
     if (isInCall) return;
     resetCallState();
-    setVerificationConfirmed(true);
     setStage("servicing");
     setStatus("connecting");
 
@@ -1230,7 +1225,6 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
         <section className="panel chat" aria-label="Conversation">
           <div className="panel-head"><strong>Live conversation</strong><span className={"live-dot" + (status === "live" ? " on" : "")}><i />{status === "live" ? "Captions live" : "Ready"}</span></div>
           {analysis?.tags.length ? <div className="tag-row">{analysis.tags.map((tag) => <button type="button" key={tag.id} className={"tag kind-" + tag.kind} onClick={() => jumpToEvidence(tag.evidenceIds)}>{tag.label}</button>)}</div> : null}
-          {accountVerified && <div className="verification-confirmation" role="status">Verification complete · Account details unlocked</div>}
           <div className="chat-feed" ref={transcriptFeedRef}>
             {turns.length === 0 && draftList.length === 0 ? (
               <div className="chat-empty">
@@ -1272,8 +1266,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
           {analysisError && <div className="soft-error" role="status"><CircleAlert size={15} />{analysisError}</div>}
         </section>
 
-        {selected?.profile && <ClientProfilePanel name="K" age={selected.age} profile={selected.profile} plan={crossSell.plan} actions={trainingActions} turns={turns} verified={accountVerified} onVerify={() => setVerificationConfirmed(true)} />}
-        {!selected?.profile && <aside className="client-panel" aria-label="Client profile"><div className="client-section"><small>CLIENT PROFILE</small><h2>Waiting for a caller</h2><p>The client profile appears when you pick the call. Accounts unlock after verification.</p></div></aside>}
+        {selected?.profile && <ClientProfilePanel name="K" age={selected.age} profile={selected.profile} plan={crossSell.plan} actions={trainingActions} turns={turns} />}
+        {!selected?.profile && <aside className="client-panel" aria-label="Client profile"><div className="client-section"><small>CLIENT PROFILE</small><h2>Waiting for a caller</h2><p>The client profile appears when you pick the call.</p></div></aside>}
       </main>
     </div>
   );

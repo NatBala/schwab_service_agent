@@ -47,7 +47,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "I can review the linked bank information and help you establish the recurring instruction. Before accessing the account, I’ll need to complete our standard verification."
+        "text": "I can review the linked bank information and help you establish the recurring instruction."
       },
       {
         "speaker": "representative",
@@ -272,7 +272,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "I can review the current values and recent activity. I’ll first complete standard verification."
+        "text": "I can review the current values and recent activity."
       },
       {
         "speaker": "representative",
@@ -437,7 +437,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "I can help you locate the appropriate report. I’ll first complete standard verification."
+        "text": "I can help you locate the appropriate report."
       },
       {
         "speaker": "representative",
@@ -620,7 +620,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "I can help route you to the appropriate rollover process. I’ll first complete standard verification."
+        "text": "I can help route you to the appropriate rollover process."
       },
       {
         "speaker": "representative",
@@ -804,7 +804,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "Congratulations. I can explain the main account categories and connect you with an education-savings specialist. Before reviewing your existing relationship, I’ll complete standard verification."
+        "text": "Congratulations. I can explain the main account categories and connect you with an education-savings specialist."
       },
       {
         "speaker": "representative",
@@ -949,7 +949,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "I can help identify the appropriate resources. Before focusing on the application, I’ll complete standard verification."
+        "text": "I can help identify the appropriate resources."
       },
       {
         "speaker": "representative",
@@ -1115,7 +1115,7 @@ const briefs = [
       },
       {
         "speaker": "representative",
-        "text": "I can help you access the approved beneficiary-update process. I’ll first complete standard verification."
+        "text": "I can help you access the approved beneficiary-update process."
       },
       {
         "speaker": "representative",

@@ -14,7 +14,7 @@ import type { crossSellCueContext } from "./cross-sell";
  * the request, reads the streamed tool arguments, and validates them.
  */
 
-export const CUE_STAGES = ["greeting", "verification", "servicing", "discovery", "recommendation", "closing"] as const;
+export const CUE_STAGES = ["greeting", "servicing", "discovery", "recommendation", "closing"] as const;
 export type CueStage = typeof CUE_STAGES[number];
 
 /** How long Jordan waits for the coach before replying without a directive. */
@@ -58,7 +58,7 @@ export const CUE_INSTRUCTIONS = [
   OFFERING_CONVERSATION_OBJECTIVE,
   "Speed matters: Jordan is waiting for you before replying. Emit callReason first, keep every string short, and do not deliberate at length.",
   "callReason: classify the client's original reason for calling using one exact category/subcategory/reason triple from the supplied taxonomy, citing the client turn ID(s). If the client has not yet stated a reason, use category \"Unclassified\" and an empty evidence list. Once identified, keep the original reason stable; later discovery topics do not change it.",
-  "stage: where the call is now. greeting before any request; verification is already complete and should be skipped; servicing until the original request is resolved; discovery while clarifying a need tied to a catalog offering; recommendation when introducing an offering or completing its accepted setup; closing after completion and an agreed wrap-up, a goodbye, or a clear decline.",
+  "stage: where the call is now. greeting before any request; servicing until the original request is resolved; discovery while clarifying a need tied to a catalog offering; recommendation when introducing an offering or completing its accepted setup; closing after completion and an agreed wrap-up, a goodbye, or a clear decline.",
   "say: the key line Jordan should deliver next, at most 28 words, in Jordan's voice. First answer or acknowledge what the client just said, then at most one question. Service first: resolve the original request before discovery. After service, open discovery with one open question tied to what the client said. Introduce an offering only when the client's own words support it, ask permission, and never claim formal suitability, returns, or tax outcomes. For an accepted offering, guide setup, review the choices, and ask for final authorization to complete_training_action. Confirm completion only after tool success. Actions affect the synthetic workspace only. Do not default to referrals or self-service. Respect declines and goodbyes. Never repeat an answered question.",
   "nextStep: at most 10 words of listening advice for the representative. rationale: at most 10 words citing why.",
   "offeringId: the single most relevant catalog ID to explore now, supported by the client's own words, or an empty string. A representative's suggestion is never client interest.",

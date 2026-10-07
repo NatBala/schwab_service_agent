@@ -151,7 +151,6 @@ test("wrap-up includes an offering actually discussed without claiming client fi
   assert.equal(callPathSummary([plan],[{id:"named",role:"representative",text:"You could explore Schwab Plan."}]).length,1);
 });
 
-import { demoVerificationComplete } from "../lib/demo-verification";
 import { LIVE_TURN_DETECTION, canRunBackgroundCoaching, spokenReplyRequest } from "../lib/realtime-turns";
 test("voice turns are coach-first: VAD commits audio but the app requests Jordan's reply", () => {
   assert.equal(LIVE_TURN_DETECTION.create_response, false);
@@ -167,20 +166,6 @@ test("coaching waits for primary generation and representative transcript, inclu
   assert.equal(canRunBackgroundCoaching(false, true, answered), false);
   assert.equal(canRunBackgroundCoaching(false, false, [{role:"customer"}]), false);
   assert.equal(canRunBackgroundCoaching(false, false, answered), true);
-});
-test("explicit quick demo consent immediately reveals synthetic accounts, unrelated yes and declines do not", () => {
-  const request = {role:"representative",text:"May I complete a quick demo verification?"};
-  assert.equal(demoVerificationComplete([request,{role:"customer",text:"Yes, go ahead."}]), true);
-  assert.equal(demoVerificationComplete([request,{role:"customer",text:"No thanks."}]), false);
-  assert.equal(demoVerificationComplete([{role:"representative",text:"Would you like to discuss retirement?"},{role:"customer",text:"Yes."}]), false);
-  assert.equal(demoVerificationComplete([request,{role:"customer",text:"I need help first."},{role:"representative",text:"Is that all?"},{role:"customer",text:"Yes."}]), false);
-});
-test("profile accounts unlock only after verification consent and confirmation", () => {
-  const request = {role:"representative", text:'Would you like to proceed? Then I will say, “Demo verification is complete.”'};
-  assert.equal(demoVerificationComplete([request]), false);
-  assert.equal(demoVerificationComplete([request, {role:"customer",text:"Yes, proceed."}, {role:"representative",text:"Demo verification is complete. Let's review the account."}]), true);
-  assert.equal(demoVerificationComplete([request, {role:"customer",text:"No, don't proceed."}, {role:"representative",text:"Demo verification is complete."}]), false);
-  assert.equal(demoVerificationComplete([{role:"representative",text:"Demo verification is complete."}]), false);
 });
 
 import { CUE_TOOL, closePartialJson, cueDirectiveItem, cueRequest, readCue } from "../lib/live-cue";
@@ -254,15 +239,10 @@ test("the cue becomes a private system directive for Jordan's next reply", () =>
   assert.doesNotMatch(servicing, /Intelligent Portfolios/, "no offering push while servicing");
 });
 
- test("verification wording automatically unlocks accounts after explicit consent", () => {
-  const request = { role: "representative", text: "May I complete a quick verification?" };
-  assert.equal(demoVerificationComplete([request, { role: "customer", text: "Yes, please." }]), true);
-  assert.equal(demoVerificationComplete([request, { role: "customer", text: "No." }]), false);
-});
 
 import { advanceCallStage, retainOfferings } from "../lib/call-progress";
-test("verification progresses to service and late cues cannot regress discovery", () => {
-  assert.equal(advanceCallStage("verification", "servicing"), "servicing");
+test("the call moves from greeting to service and late cues cannot regress discovery", () => {
+  assert.equal(advanceCallStage("greeting", "servicing"), "servicing");
   assert.equal(advanceCallStage("discovery", "servicing"), "discovery");
   assert.equal(advanceCallStage("servicing", "recommendation"), "recommendation");
 });
@@ -343,7 +323,7 @@ test("reports preserve named offerings when no background assessment completed",
 });
 
 import { POST as createRealtimeSession } from "../app/api/realtime/session/route";
-test("realtime session skips verification and provides the training completion tool", async () => {
+test("realtime session never asks for verification and provides the training completion tool", async () => {
   const originalFetch = globalThis.fetch;
   const originalKey = process.env.OPENAI_API_KEY;
   let captured: { session?: { instructions?: string; tools?: Array<{name: string}> } } = {};
@@ -357,7 +337,8 @@ test("realtime session skips verification and provides the training completion t
     const response = await createRealtimeSession(new Request("http://localhost/api/realtime/session", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({scenarioId:"relationship-01",completedActions:[{offeringName:"Schwab Intelligent Portfolios",summary:"Training account opened",accountName:"Intelligent Portfolios account"}]})}));
     assert.equal(response.status,200);
     assert.ok(captured.session?.tools?.some(tool => tool.name === "complete_training_action"));
-    assert.ok(captured.session?.instructions?.includes("Skip verification questions"));
+    assert.ok(captured.session?.instructions?.includes("Never ask the caller to verify their identity"));
+    assert.ok(!/demo verification\?|May I complete a quick/i.test(captured.session?.instructions ?? ""));
     assert.ok(captured.session?.instructions?.includes("The tool must return success before you claim completion"));
     assert.ok(captured.session?.instructions?.includes("Training account opened"));
     assert.ok(captured.session?.instructions?.includes('"book":"$312,000"'));
@@ -579,4 +560,11 @@ test("Jordan's instructions and the shared objective cover the pre-call plan", a
     if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = originalKey;
   }
+});
+
+import { CUE_STAGES } from "../lib/live-cue";
+test("the demo has no verification step anywhere", () => {
+  assert.ok(!(CUE_STAGES as readonly string[]).includes("verification"));
+  assert.equal(advanceCallStage(null, "greeting"), "greeting");
+  for (const scenario of SCENARIOS) for (const line of scenario.script ?? []) assert.doesNotMatch(line.text, /verification/i, scenario.id);
 });

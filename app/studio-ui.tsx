@@ -16,10 +16,8 @@ import {
   Flag,
   Handshake,
   Headphones,
-  Lock,
   MessageCircleQuestion,
   Radar,
-  ShieldCheck,
   Sparkles,
   Target,
   Wrench,
@@ -84,7 +82,6 @@ export function CallReasonHero({ reason, latencyMs, flash, confirmed, live, clie
 
 const STAGES: Array<{ id: CueStage; label: string; icon: typeof Flag }> = [
   { id: "greeting", label: "Greet", icon: Handshake },
-  { id: "verification", label: "Verify", icon: ShieldCheck },
   { id: "servicing", label: "Service", icon: Wrench },
   { id: "discovery", label: "Discover", icon: Compass },
   { id: "recommendation", label: "Recommend", icon: Target },
@@ -357,25 +354,19 @@ export function CallTransition({ customerTurn, representativeTurn, milestones, s
 
 /* ───────────────────────── Client profile ───────────────────────── */
 
-export function ClientProfilePanel({ name, age, profile, plan, actions, turns, verified, onVerify }: {
-  name: string; age: number; profile: CustomerProfile; plan?: CrossSellPlan | null; actions: TrainingAction[]; turns: Turn[]; verified: boolean; onVerify: () => void;
+export function ClientProfilePanel({ name, age, profile, plan, actions, turns }: {
+  name: string; age: number; profile: CustomerProfile; plan?: CrossSellPlan | null; actions: TrainingAction[]; turns: Turn[];
 }) {
   const advisorChange = actions.findLast(action => ["financial_consultant", "wealth_advisory"].includes(action.offeringId) && ["schedule", "enroll"].includes(action.kind));
   const words = turns.filter(turn => turn.role === "customer").map(turn => turn.text.toLowerCase()).join(" ");
   const learned = profile.discoverable.filter(fact => fact.phrases.some(phrase => words.includes(phrase.toLowerCase())));
   return <aside className="client-panel" aria-label="Client profile">
     <div className="client-hero">
-      <div className="client-photo"><Image width={84} height={84} priority unoptimized src="/profiles/client-male.png" alt={`Fictional training portrait for ${name}`} /><span className={verified ? "ok" : ""}>{verified ? <Check size={12} /> : <Lock size={11} />}</span></div>
+      <div className="client-photo"><Image width={84} height={84} priority unoptimized src="/profiles/client-male.png" alt={`Fictional training portrait for ${name}`} /></div>
       <h2>{name}</h2>
       <p>{age > 0 ? `Age ${age} · ` : ""}{profile.relationship}</p>
-      <span className={"verify-chip" + (verified ? " ok" : "")}>{verified ? <><ShieldCheck size={12} /> Verified</> : <><Lock size={11} /> Verification pending</>}</span>
     </div>
-    {!verified ? <div className="client-locked">
-      <Lock size={18} />
-      <strong>Account snapshot locked</strong>
-      <p>Unlocks after Jordan completes the verification.</p>
-      <button type="button" onClick={onVerify}>Confirm verification <Check size={13} /></button>
-    </div> : <>
+    <>
       <div className="client-section"><small>CLIENT DETAILS</small><table className="profile-table"><tbody>
         {[["Name", "K"], ["Client ID", profile.clientId ?? "Not on file"], ["Address", profile.address ?? "Not on file"], ["Book", plan ? formatMoney(plan.book) : profile.book ?? "Not assigned"], ["Segment", profile.segment ?? "Not classified"], ["Advisor", advisorChange ? advisorChange.summary : profile.advisor ?? "No advisor assigned"], ["Relationship", profile.relationship], ["Prior contacts", String(profile.priorContacts)], ["Last contact", profile.lastContact]].map(([label, value]) => <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>)}
       </tbody></table></div>
@@ -391,9 +382,9 @@ export function ClientProfilePanel({ name, age, profile, plan, actions, turns, v
       {actions.length > 0 && <div className="client-section"><small>COMPLETED CHANGES</small>{actions.map(action => <div className="client-account training-change" key={action.id}><strong>{action.offeringName}</strong><span>{action.summary}</span><small>Saved · Available on your next visit</small></div>)}</div>}
       {plan && <div className="client-section"><small>ACCOUNT SIGNALS · THIS CALL</small><ul className="signal-list">{plan.signals.map(item => <li key={item.id}><Database size={11} /><span><strong>{item.label}</strong>{item.detail}</span></li>)}</ul></div>}
       <div className="client-section"><small>CURRENT SERVICE NEED</small><p>{profile.context}</p></div>
-    </>}
+    </>
     <div className="client-section"><small>LEARNED IN THIS CALL</small>{learned.length ? <div className="learned">{learned.map(fact => <span key={fact.label}><Sparkles size={10} />{fact.label}</span>)}</div> : <p>Goals and household details appear as the client shares them.</p>}</div>
-    {verified && <div className="client-section muted"><small>CONTACT HISTORY</small><p>{profile.priorContacts} prior contacts · Last: {profile.lastContact}</p></div>}
+    {<div className="client-section muted"><small>CONTACT HISTORY</small><p>{profile.priorContacts} prior contacts · Last: {profile.lastContact}</p></div>}
     <div className="client-foot"><Headphones size={12} /> Client relationship overview</div>
   </aside>;
 }
