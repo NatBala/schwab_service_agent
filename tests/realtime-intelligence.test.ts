@@ -276,17 +276,40 @@ test("K has a male portrait and complete fictional CRM fields in every scenario"
   }
   assert.ok(SCENARIOS.every(scenario => scenario.callerName === "K"));
 });
-test("completion needs no authorization: a natural yes or a plain answer completes the change", () => {
-  const input = { offeringId: "automated_investing", kind: "open_account", accountName: "Intelligent Portfolios account", summary: "Opened the training account", steps: ["Selected funding"] };
-  for (const reply of ["Sounds good.", "Yes.", "Use my brokerage account.", "Sure, why not", "Let's do it"]) {
-    const transcript = [{id: "offer", role: "representative", text: "Want me to set that up with your brokerage account?"}, {id: "answer", role: "customer", text: reply}];
-    assert.equal(validateTrainingAction(input, transcript).consentTurnId, "answer", reply);
+const offerTurns = (offer: string, reply: string) => [{id: "offer", role: "representative", text: offer}, {id: "answer", role: "customer", text: reply}];
+const actionInput = { offeringId: "automated_investing", kind: "open_account", accountName: "Intelligent Portfolios account", summary: "Opened the training account", steps: [] as string[] };
+test("a change completes after any natural yes to Jordan's offer, or a direct request", () => {
+  for (const reply of ["Yes.", "Yeah, sure.", "Sure, why not", "Sounds good", "Okay, go ahead", "Let's do it", "Uh, yeah, that works", "Absolutely"]) {
+    assert.equal(validateTrainingAction(actionInput, offerTurns("Would you like me to set up Schwab Intelligent Portfolios for you now?", reply)).consentTurnId, "answer", reply);
   }
-  // No confirmation question by Jordan, no quoted consent and no setup steps are required.
-  const plain = [{id: "ask", role: "customer", text: "Please open a managed account for my IRA cash."}];
-  assert.equal(validateTrainingAction({ ...input, steps: [] }, plain).steps.length, 0);
-  assert.throws(() => validateTrainingAction({...input, offeringId: "invented"}, plain));
-  assert.throws(() => validateTrainingAction(input, [{id: "only-rep", role: "representative", text: "Hello"}]));
+  for (const offer of ["Shall I schedule a planning conversation for Tuesday at 2?", "Want me to get that transfer scheduled for the fifth?", "Should I enroll your IRA in Intelligent Portfolios?"]) {
+    assert.equal(validateTrainingAction(actionInput, offerTurns(offer, "Yes")).consentTurnId, "answer", offer);
+  }
+  assert.equal(validateTrainingAction(actionInput, [{id: "ask", role: "customer", text: "Please set up an $800 monthly transfer on the fifth."}]).consentTurnId, "ask");
+  // A yes can be followed by setup details before the save.
+  const withDetails = [...offerTurns("Would you like me to enroll your IRA in Intelligent Portfolios?", "Yes."), {id: "q", role: "representative", text: "Which account should fund it?"}, {id: "detail", role: "customer", text: "The IRA cash."}];
+  assert.equal(validateTrainingAction(actionInput, withDetails).consentTurnId, "answer");
+  assert.throws(() => validateTrainingAction({...actionInput, offeringId: "invented"}, offerTurns("Would you like me to set that up?", "Yes")));
+});
+test("no completion without a yes: hearing more, other answers, facts, questions and declines", () => {
+  const offer = "Would you like me to set up Schwab Plan for you now?";
+  for (const reply of ["No thanks.", "Not right now.", "Maybe later.", "Let me think about it.", "How much does it cost?", "Hold on.", "I'd rather not."]) {
+    assert.throws(() => validateTrainingAction(actionInput, offerTurns(offer, reply)), /has not said yes/, reply);
+  }
+  // Example 3: "Sure, sure" only agreed to hear about a specialist review.
+  assert.throws(() => validateTrainingAction(actionInput, offerTurns("Would you like to hear how that specialist review could fit your situation?", "Sure, sure.")));
+  // Example 2: account facts in reply to a goal question.
+  assert.throws(() => validateTrainingAction(actionInput, offerTurns("What retirement income goal and spending timeline do you want to focus on first?", "We still owe around 280K on our house and we have a rental property")));
+  // Example 1: an earlier request followed by plan options the client never chose between.
+  assert.throws(() => validateTrainingAction(actionInput, [
+    {id: "c1", role: "customer", text: "I want to open a SEP IRA."},
+    {id: "j1", role: "representative", text: "Do you want a plan where employees can make their own contributions, or one funded by employer contributions?"},
+    {id: "c2", role: "customer", text: "I thought SEP IRA was automatically the simplest option"},
+    {id: "c3", role: "customer", text: "I plan to hire one person next quarter and perhaps three more next year."},
+  ]));
+  // A yes counts once: it cannot be reused for a different change.
+  assert.throws(() => validateTrainingAction(actionInput, offerTurns(offer, "Yes"), ["answer"]));
+  assert.throws(() => validateTrainingAction(actionInput, [{id: "j", role: "representative", text: "Hello"}]));
 });
 test("the completion tool and every prompt are free of authorization steps", () => {
   assert.deepEqual(TRAINING_ACTION_TOOL.parameters.properties.offeringId.enum, [...RELATIONSHIP_PATHS.map(path => path.id), "service_request"]);
@@ -294,7 +317,8 @@ test("the completion tool and every prompt are free of authorization steps", () 
   assert.ok(!(TRAINING_ACTION_TOOL.parameters.required as readonly string[]).includes("consentText"));
   const asksForAuthorization = /(?<!never )ask (?:the client )?for (?:final )?(?:authori[sz]ation|consent|confirmation)|after final (?:authori[sz]ation|consent)|quote the latest client authori[sz]ation/i;
   assert.doesNotMatch(OFFERING_CONVERSATION_OBJECTIVE, asksForAuthorization);
-  assert.match(OFFERING_CONVERSATION_OBJECTIVE, /Never ask for authorization/);
+  assert.match(OFFERING_CONVERSATION_OBJECTIVE, /only after the client says yes in any natural way/);
+  assert.match(OFFERING_CONVERSATION_OBJECTIVE, /Never ask for a specific phrase such as 'I authorize'/);
   assert.doesNotMatch(cueRequest({ version: 1, turns }).response.instructions, asksForAuthorization);
   assert.doesNotMatch(coachingRequest(turns, 1).response.instructions, asksForAuthorization);
 });
@@ -382,7 +406,7 @@ test("both private coaches keep the offering objective and receive saved executi
 });
 
 test("completed enrollments retain the selected account across saved profile reloads", () => {
-  const turns = [{id:"review", role:"representative", text:"Confirm enrollment in Schwab Intelligent Portfolios using your brokerage account?"}, {id:"consent", role:"customer", text:"Yes, please proceed."}];
+  const turns = [{id:"review", role:"representative", text:"Would you like me to enroll your brokerage account in Schwab Intelligent Portfolios now?"}, {id:"consent", role:"customer", text:"Yes, please proceed."}];
   const validated = validateTrainingAction({offeringId:"automated_investing",kind:"enroll",accountName:"Self-directed brokerage",summary:"Enrolled in Schwab Intelligent Portfolios",steps:["Reviewed investing goal and horizon", "Selected brokerage account and funding"]}, turns);
   let saved = "";
   persistTrainingAction(validated, [], "enrollment-1", {setItem: (_key, value) => { saved = value; }});

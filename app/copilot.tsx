@@ -102,6 +102,8 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
   const [trainingActions, setTrainingActions] = useState<TrainingAction[]>([]);
   const trainingActionsRef = useRef<TrainingAction[]>([]);
   const completedToolCallsRef = useRef(new Set<string>());
+  // Client audio turns whose transcript has not arrived yet; the save tool waits for them.
+  const pendingClientTranscriptsRef = useRef(new Set<string>());
   const reportVersionRef = useRef(0);
   const [reportUpdating, setReportUpdating] = useState(false);
   function loadTrainingActions() {
@@ -244,6 +246,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
 
   function resetCallState() {
     reportVersionRef.current += 1;
+    pendingClientTranscriptsRef.current.clear();
     crossSellVersionRef.current += 1;
     crossSellRef.current = null;
     crossSellSentRef.current = "";
@@ -356,12 +359,22 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     }
   }
 
-  function completeTrainingAction(callId: string, argumentsText: string) {
-    if (!callId || completedToolCallsRef.current.has(callId)) return;
+  function completeTrainingAction(callId: string, argumentsText: string, deferredSince = 0) {
+    if (!callId || (!deferredSince && completedToolCallsRef.current.has(callId))) return;
     completedToolCallsRef.current.add(callId);
+    // Judge agreement on what the client actually said: wait (briefly) for a transcript still arriving
+    // instead of failing, so the client is never asked to repeat themselves.
+    const startedAt = deferredSince || performance.now();
+    if (pendingClientTranscriptsRef.current.size && performance.now() - startedAt < 4000) {
+      window.setTimeout(() => completeTrainingAction(callId, argumentsText, startedAt), 150);
+      return;
+    }
     let output: unknown;
     try {
-      const validated = validateTrainingAction(JSON.parse(argumentsText), turnsRef.current);
+      const args = JSON.parse(argumentsText) as { offeringId?: unknown; kind?: unknown };
+      // Each yes covers one change: an agreement already used for a different action cannot be reused.
+      const usedAgreements = trainingActionsRef.current.filter(action => action.offeringId !== args.offeringId || action.kind !== args.kind).map(action => action.consentTurnId);
+      const validated = validateTrainingAction(args, turnsRef.current, usedAgreements);
       // Persist successfully before acknowledging completion to the representative.
       const { action, actions } = persistTrainingAction(validated, trainingActionsRef.current, callId, localStorage);
       trainingActionsRef.current = actions;
@@ -376,7 +389,9 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
       directiveItemIdRef.current = "";
     }
     send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) } });
-    replyQueuedRef.current = true;
+    // Jordan replies to the tool result: right away if the tool response has already finished.
+    if (deferredSince && !primaryResponseActiveRef.current) sendPrimaryReply();
+    else replyQueuedRef.current = true;
   }
 
   /* ───────────── Live cue: LLM-generated before Jordan speaks ───────────── */
@@ -827,6 +842,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     if (type === "input_audio_buffer.committed") {
       if (typeof event.item_id === "string") {
         itemOrder(event.item_id);
+        pendingClientTranscriptsRef.current.add(event.item_id);
         if (firstClientTurnEndRef.current === null) firstClientTurnEndRef.current = performance.now();
         // Coach first: the LLM hears the committed audio and writes Jordan's cue.
         requestCue(event.item_id, true);
@@ -979,6 +995,7 @@ export default function Copilot({ scenarios }: { scenarios: Scenario[] }) {
     if (!isCustomer && !isRepresentative) return;
     const role: Turn["role"] = isCustomer ? "customer" : "representative";
     const id = String(event.item_id ?? event.response_id ?? (role + "-current"));
+    if (isCustomer && (type.endsWith(".completed") || type.endsWith(".failed"))) pendingClientTranscriptsRef.current.delete(id);
     if (isRepresentative) {
       const responseStatus = responseStatusRef.current.get(String(event.response_id ?? ""));
       if (responseStatus && responseStatus !== "completed") return;

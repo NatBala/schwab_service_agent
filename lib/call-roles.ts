@@ -46,7 +46,7 @@ export const CLIENT_ROLE_BRIEFS: Record<string, ClientRoleBrief> = {
 export const REPRESENTATIVE_SERVICE_RECORDS: Record<string, RepresentativeServiceRecord> = {
   "relationship-01": {
     knownRecord: ["K has a self-directed taxable brokerage account with approximately $12,000.", "A linked checking account is part of the scripted relationship. The status of any new recurring instruction is not known."],
-    serviceApproach: "Clarify the transfer amount, cadence, date, source, and destination. Once the details are known, save it with complete_training_action and confirm it is scheduled.",
+    serviceApproach: "Clarify the transfer amount, cadence, date, source, and destination. Once the details are known, save it with complete_training_action (their request is their yes) and confirm it is scheduled.",
     discoveryBridge: "After the client understands the transfer setup, ask what the monthly deposit is helping them work toward.",
     deskReferences: ["schwab_plan", "automated_investing", "fractional_shares"],
   },
@@ -64,19 +64,19 @@ export const REPRESENTATIVE_SERVICE_RECORDS: Record<string, RepresentativeServic
   },
   "relationship-04": {
     knownRecord: ["K has an open Rollover IRA with no completed former-plan transfer in the practice record.", "The former employer 401(k) is approximately $185,000. Collect the client's distribution preferences and record the rollover setup the client asks for; do not invent payee details or claim funds have arrived."],
-    serviceApproach: "Clarify whether a distribution was requested and explain the direct-rollover process. Guide the training rollover setup and complete it once the client's choices are known. Do not imply the IRA rollover itself is a recommendation.",
+    serviceApproach: "Clarify whether a distribution was requested and explain the direct-rollover process. Guide the training rollover setup; complete it once the client's choices are known and they have said yes. Do not imply the IRA rollover itself is a recommendation.",
     discoveryBridge: "After the rollover process is clear, ask what K wants these retirement assets to support.",
     deskReferences: ["schwab_plan", "automated_investing", "financial_consultant"],
   },
   "relationship-05": {
     knownRecord: ["K is asking about an account for a newborn daughter; no child account has been opened in this practice record."],
-    serviceApproach: "Compare the purpose and control of education-focused and custodial account structures at a high level. Clarify intended use before suggesting an account type. After the client selects an account type, guide setup and complete the training action.",
+    serviceApproach: "Compare the purpose and control of education-focused and custodial account structures at a high level. Clarify intended use before suggesting an account type. After the client selects an account type, guide setup and complete the training action after their yes.",
     discoveryBridge: "Once the account choices are clear, ask how the family wants to balance child savings with other goals.",
     deskReferences: ["college_529", "education_savings_account", "custodial_account", "schwab_plan"],
   },
   "relationship-06": {
     knownRecord: ["K owns a consulting firm and is asking about a SEP-IRA; no plan has been opened in this practice record."],
-    serviceApproach: "Ask about current and expected employees, then compare relevant plan structures and guide the training application steps and complete the action for the selected plan.",
+    serviceApproach: "Ask about current and expected employees, then compare relevant plan structures and guide the training application steps and complete the action only after the client chooses a plan and says yes.",
     discoveryBridge: "After plan requirements are clarified, ask whether other business or personal finances need coordination.",
     deskReferences: ["small_business_retirement", "organization_account", "cash_options", "financial_consultant", "schwab_plan"],
   },
